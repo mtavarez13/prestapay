@@ -1,137 +1,96 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    // Collection: usuarios
-    // Fields: uid, email, role, permissions
-    // Collection: clientes
-    // Fields: id, name, phone, address, createdAt
-    // Collection: articulos
-    // Fields: id, name, category, brand, state, contractId, clientId, description, createdAt
-    // Collection: contratos_empeno
-    // Fields: id, clientId, type, capital, rate, installments, balance, status, createdAt, dueDate
-    // Collection: transacciones_caja
-    // Fields: id, contractId, type, amount, previousBalance, newBalance, createdAt
-    // Collection: configuracion
-    // Fields: businessName, initialCapital, notaryData
-    // Collection: gastos_fijos
-    // Fields: id, description, amount, date
-    // ===============================================================
+    function signedIn() { return request.auth != null; }
+    function superAdmin() { return signedIn() && request.auth.token.superAdmin == true; }
+    function tenantDoc(tenantId) { return get(/databases/$(database)/documents/tenants/$(tenantId)); }
+    function membership(tenantId) { return get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)); }
+    function activeMember(tenantId) {
+      return signedIn() && exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid))
+        && membership(tenantId).data.status == 'active';
+    }
+    function roleIn(tenantId, roles) { return activeMember(tenantId) && membership(tenantId).data.role in roles; }
+    function subscriptionActive(tenantId) {
+      return tenantDoc(tenantId).data.status == 'active'
+        && tenantDoc(tenantId).data.subscription.status in ['trialing', 'active']
+        && tenantDoc(tenantId).data.subscription.accessUntil > request.time;
+    }
+    function validTenantEntity(tenantId) {
+      return request.resource.data.tenantId == tenantId && request.resource.data.tenantId == resource.data.tenantId;
+    }
+    function validNewTenantEntity(tenantId) { return request.resource.data.tenantId == tenantId; }
 
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-    function isAuthenticated() {
-      return request.auth != null;
+    match /users/{uid} {
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow read: if signedIn() && (request.auth.uid == uid || superAdmin());
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'activeTenantId', 'updatedAt']);
+      allow delete: if false;
+      match /memberships/{tenantId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.userId == uid && request.resource.data.tenantId == tenantId
+          && request.resource.data.role == 'owner'
+          && getAfter(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerId == uid;
+        allow write: if superAdmin();
+      }
     }
 
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
+    match /tenants/{tenantId} {
+      allow create: if signedIn() && request.resource.data.id == tenantId
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.subscription.status == 'trialing'
+        && request.resource.data.subscription.accessUntil is timestamp
+        && request.resource.data.subscription.accessUntil > request.time
+        && request.resource.data.subscription.accessUntil <= request.time + duration.value(14, 'd');
+      allow read: if superAdmin() || activeMember(tenantId);
+      allow update: if superAdmin() || (roleIn(tenantId, ['owner', 'admin'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['branding', 'printer', 'updatedAt']));
+      allow delete: if false;
 
-    function isAdmin() {
-      return isAuthenticated() &&
-        (get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "martin.tavarez.gomez@gmail.com" && request.auth.token.email_verified == true));
+      match /members/{uid} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create: if superAdmin() || roleIn(tenantId, ['owner', 'admin'])
+          || (signedIn() && uid == request.auth.uid && request.resource.data.userId == uid
+            && request.resource.data.tenantId == tenantId && request.resource.data.role == 'owner'
+            && getAfter(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerId == uid);
+        allow update: if superAdmin() || (roleIn(tenantId, ['owner', 'admin'])
+          && resource.data.role != 'owner' && request.resource.data.tenantId == tenantId);
+        allow delete: if superAdmin() || (roleIn(tenantId, ['owner']) && resource.data.role != 'owner');
+      }
+      match /clients/{id} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser','cashier']) && validNewTenantEntity(tenantId);
+        allow update: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser','cashier']) && validTenantEntity(tenantId);
+        allow delete: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin']);
+      }
+      match /loans/{id} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser']) && validNewTenantEntity(tenantId);
+        allow update: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser']) && validTenantEntity(tenantId);
+        allow delete: if false;
+      }
+      match /articles/{id} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser']) && validNewTenantEntity(tenantId);
+        allow update: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','appraiser']) && validTenantEntity(tenantId);
+        allow delete: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin']);
+      }
+      match /transactions/{id} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','cashier']) && validNewTenantEntity(tenantId);
+        allow update, delete: if false;
+      }
+      match /fixedExpenses/{id} {
+        allow read: if superAdmin() || activeMember(tenantId);
+        allow create, update: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','cashier']);
+        allow delete: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin']);
+      }
+      match /receipts/{id} { allow read: if superAdmin() || activeMember(tenantId); allow write: if false; }
+      match /auditLogs/{id} { allow read: if superAdmin() || roleIn(tenantId, ['owner','admin']); allow write: if false; }
     }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidUrl(url) {
-      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
-    }
-
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // ===============================================================
-    function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'role', 'permissions']) &&
-             data.uid is string && data.email is string && isValidEmail(data.email) &&
-             data.role in ['admin', 'tasador', 'cajero'];
-    }
-
-    function isValidClient(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'phone', 'address', 'createdAt']) &&
-             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
-             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20;
-    }
-
-    function isValidArticle(data) {
-      return hasOnlyAllowedFields(['id', 'name', 'category', 'brand', 'state', 'contractId', 'clientId', 'description', 'createdAt']) &&
-             data.name is string && data.category is string &&
-             data.state in ['en_resguardo', 'devuelto', 'vendido'];
-    }
-
-    function isValidLoan(data) {
-      return hasOnlyAllowedFields(['id', 'clientId', 'type', 'capital', 'rate', 'installments', 'balance', 'status', 'createdAt', 'dueDate']) &&
-             data.clientId is string && data.type in ['prenda', 'sin_garantia', 'hipotecario'] &&
-             data.capital is number && data.rate is number && data.status in ['activo', 'atrasado', 'vencido', 'pagado'];
-    }
-
-    function isValidTransaction(data) {
-      return hasOnlyAllowedFields(['id', 'contractId', 'type', 'amount', 'previousBalance', 'newBalance', 'createdAt']) &&
-             data.type in ['ingreso', 'egreso'] && data.amount is number;
-    }
-
-    // ===============================================================
-    // Rules
-    // ===============================================================
-    match /usuarios/{uid} {
-      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin());
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(uid) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(uid) || isAdmin());
-    }
-
-    match /clientes/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidClient(request.resource.data);
-      allow update: if isAuthenticated() && isValidClient(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
-    match /articulos/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidArticle(request.resource.data);
-      allow update: if isAuthenticated() && isValidArticle(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
-    match /contratos_empeno/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidLoan(request.resource.data);
-      allow update: if isAuthenticated() && isValidLoan(request.resource.data);
-      allow delete: if isAdmin();
-    }
-
-    match /transacciones_caja/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    match /configuracion/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
-    }
-
-    match /gastos_fijos/{id} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAdmin();
-    }
+    match /plans/{id} { allow read: if true; allow write: if superAdmin(); }
+    match /{document=**} { allow read, write: if false; }
   }
 }

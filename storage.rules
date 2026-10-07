@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function member(tenantId) {
+      return signedIn() && firestore.exists(/databases/(default)/documents/tenants/$(tenantId)/members/$(request.auth.uid));
+    }
+    function manager(tenantId) {
+      return member(tenantId) && firestore.get(/databases/(default)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+    match /tenants/{tenantId}/branding/{fileName} {
+      allow read: if member(tenantId);
+      allow write: if manager(tenantId) && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
