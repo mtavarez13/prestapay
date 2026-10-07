@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: usuarios
+    // Fields: uid, email, role, permissions
+    // Collection: clientes
+    // Fields: id, name, phone, address, createdAt
+    // Collection: articulos
+    // Fields: id, name, category, brand, state, contractId, clientId, description, createdAt
+    // Collection: contratos_empeno
+    // Fields: id, clientId, type, capital, rate, installments, balance, status, createdAt, dueDate
+    // Collection: transacciones_caja
+    // Fields: id, contractId, type, amount, previousBalance, newBalance, createdAt
+    // Collection: configuracion
+    // Fields: businessName, initialCapital, notaryData
+    // Collection: gastos_fijos
+    // Fields: id, description, amount, date
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "martin.tavarez.gomez@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'permissions']) &&
+             data.uid is string && data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'tasador', 'cajero'];
+    }
+
+    function isValidClient(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'phone', 'address', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.phone is string && data.phone.size() > 0 && data.phone.size() < 20;
+    }
+
+    function isValidArticle(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'category', 'brand', 'state', 'contractId', 'clientId', 'description', 'createdAt']) &&
+             data.name is string && data.category is string &&
+             data.state in ['en_resguardo', 'devuelto', 'vendido'];
+    }
+
+    function isValidLoan(data) {
+      return hasOnlyAllowedFields(['id', 'clientId', 'type', 'capital', 'rate', 'installments', 'balance', 'status', 'createdAt', 'dueDate']) &&
+             data.clientId is string && data.type in ['prenda', 'sin_garantia', 'hipotecario'] &&
+             data.capital is number && data.rate is number && data.status in ['activo', 'atrasado', 'vencido', 'pagado'];
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(['id', 'contractId', 'type', 'amount', 'previousBalance', 'newBalance', 'createdAt']) &&
+             data.type in ['ingreso', 'egreso'] && data.amount is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /usuarios/{uid} {
+      allow read: if isAuthenticated() && (isOwner(uid) || isAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(uid) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(uid) || isAdmin());
+    }
+
+    match /clientes/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidClient(request.resource.data);
+      allow update: if isAuthenticated() && isValidClient(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /articulos/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidArticle(request.resource.data);
+      allow update: if isAuthenticated() && isValidArticle(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /contratos_empeno/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidLoan(request.resource.data);
+      allow update: if isAuthenticated() && isValidLoan(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /transacciones_caja/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /configuracion/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /gastos_fijos/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+  }
+}
