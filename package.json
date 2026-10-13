@@ -19,6 +19,8 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
     "test": "npm --workspace backend test",
+    "test:rules": "node --test test/firestore.rules.test.mjs",
+    "test:rules:emulator": "npx firebase-tools emulators:exec --only firestore \"npm run test:rules\"",
     "build:api": "npm --workspace backend run build",
     "build:all": "npm run lint && npm run build && npm test"
   },
@@ -30,6 +32,7 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",

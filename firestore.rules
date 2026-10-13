@@ -23,8 +23,14 @@ service cloud.firestore {
     match /users/{uid} {
       allow create: if signedIn() && request.auth.uid == uid && request.resource.data.uid == uid;
       allow read: if signedIn() && (request.auth.uid == uid || superAdmin());
-      allow update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'activeTenantId', 'updatedAt']);
+      allow update: if signedIn() && request.auth.uid == uid && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'activeTenantId', 'updatedAt'])
+        || (request.resource.data.uid == uid
+          && request.resource.data.activeTenantId is string
+          && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.activeTenantId)).data.ownerId == uid
+          && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.activeTenantId)/members/$(uid)).data.role == 'owner'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid', 'email', 'displayName', 'activeTenantId', 'createdAt', 'updatedAt']))
+      );
       allow delete: if false;
       match /memberships/{tenantId} {
         allow read: if signedIn() && request.auth.uid == uid;
@@ -43,7 +49,9 @@ service cloud.firestore {
         && request.resource.data.subscription.status == 'trialing'
         && request.resource.data.subscription.accessUntil is timestamp
         && request.resource.data.subscription.accessUntil > request.time
-        && request.resource.data.subscription.accessUntil <= request.time + duration.value(14, 'd');
+        // La prueba comercial sigue siendo de 14 días; un día adicional aquí
+        // solo absorbe diferencias de reloj entre navegador y servidor.
+        && request.resource.data.subscription.accessUntil <= request.time + duration.value(15, 'd');
       allow read: if superAdmin() || activeMember(tenantId);
       allow update: if superAdmin() || (roleIn(tenantId, ['owner', 'admin'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['branding', 'printer', 'updatedAt']));
