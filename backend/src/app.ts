@@ -13,7 +13,11 @@ import { calculatePaymentBalance } from './payments.js';
 
 export const app = express();
 app.disable('x-powered-by');
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: { directives: {
+  defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
+  connectSrc: ["'self'", 'https://*.googleapis.com', 'https://*.firebaseio.com', 'wss://*.firebaseio.com'],
+  imgSrc: ["'self'", 'data:', 'https:'], frameSrc: ["'self'", 'https://accounts.google.com', 'https://prestamo-27ccb.firebaseapp.com'], objectSrc: ["'none'"],
+} } }));
 app.use(cors({ origin: (process.env.CORS_ORIGINS || 'http://localhost:3000').split(','), credentials: false }));
 app.use(express.json({ limit: '256kb' }));
 app.use(rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));

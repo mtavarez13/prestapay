@@ -11,13 +11,16 @@
   },
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build",
+    "build:web": "vite build",
+    "build": "npm run build:web && npm run build:api",
+    "build:hostinger": "npm run build",
+    "start": "npm --workspace backend start",
     "preview": "vite preview",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
     "test": "npm --workspace backend test",
     "build:api": "npm --workspace backend run build",
-    "build:all": "npm run lint && npm run build && npm run build:api && npm test"
+    "build:all": "npm run lint && npm run build && npm test"
   },
   "dependencies": {
     "firebase": "^12.19.0",

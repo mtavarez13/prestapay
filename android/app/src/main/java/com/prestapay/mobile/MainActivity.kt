@@ -8,6 +8,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +22,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -25,6 +32,8 @@ import com.prestapay.mobile.data.*
 import com.prestapay.mobile.printing.PairedPrinter
 import com.prestapay.mobile.printing.ThermalPrinter
 import com.prestapay.mobile.ui.MainViewModel
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,28 +45,35 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun PrestaPayTheme(content: @Composable () -> Unit) = MaterialTheme(
-    colorScheme = lightColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF4F46E5), secondary = androidx.compose.ui.graphics.Color(0xFF10B981)), content = content
+    colorScheme = lightColorScheme(primary = Color(0xFF0F766E), secondary = Color(0xFFF59E0B), surface = Color(0xFFFAFAF8), surfaceContainer = Color.White, background = Color(0xFFF4F7F6)), content = content
 )
 
 @Composable private fun PrestaPayApp(vm: MainViewModel) {
     val state = vm.state
     when {
         state.loading && !state.signedIn -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        !state.signedIn -> LoginScreen(state.error, vm::login, vm::register)
+        !state.signedIn -> LoginScreen(state.error, vm::login, vm::register, vm::loginWithGoogle)
         state.needsTenant -> TenantOnboarding(state.error, vm::createTenant)
         else -> MainShell(vm)
     }
 }
 
-@Composable private fun LoginScreen(error: String?, login: (String, String) -> Unit, register: (String, String) -> Unit) {
-    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var creating by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Text("PrestaPay", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black); Text("Gestión de préstamos para tu empresa", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(30.dp))
-        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, singleLine = true); Spacer(Modifier.height(10.dp))
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Contraseña") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp)) }; Spacer(Modifier.height(18.dp))
-        Button({ if (creating) register(email, password) else login(email, password) }, Modifier.fillMaxWidth(), enabled = email.isNotBlank() && password.length >= 6) { Text(if (creating) "Crear cuenta" else "Iniciar sesión") }
-        TextButton({ creating = !creating }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (creating) "Ya tengo una cuenta" else "Crear una cuenta") }
+@Composable private fun LoginScreen(error: String?, login: (String, String) -> Unit, register: (String, String) -> Unit, googleLogin: (String) -> Unit) {
+    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var creating by remember { mutableStateOf(false) }; var googleError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current; val scope = rememberCoroutineScope(); val credentialManager = remember { CredentialManager.create(context) }
+    fun signInGoogle() { scope.launch { googleError = null; runCatching { val option = GetGoogleIdOption.Builder().setFilterByAuthorizedAccounts(false).setServerClientId(BuildConfig.FIREBASE_WEB_CLIENT_ID).setAutoSelectEnabled(false).build(); val request = GetCredentialRequest.Builder().addCredentialOption(option).build(); val credential = credentialManager.getCredential(context, request).credential; require(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) { "Respuesta de Google no válida" }; GoogleIdTokenCredential.createFrom(credential.data).idToken }.onSuccess(googleLogin).onFailure { googleError = it.message ?: "No se pudo acceder con Google" } } }
+    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF083344), Color(0xFF0F766E)))).padding(22.dp), contentAlignment = Alignment.Center) {
+        ElevatedCard(Modifier.fillMaxWidth().widthIn(max = 520.dp), colors = CardDefaults.elevatedCardColors(containerColor = Color.White)) { Column(Modifier.padding(28.dp)) {
+            Surface(shape = MaterialTheme.shapes.extraLarge, color = Color(0xFFFFF7D6), modifier = Modifier.size(64.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Paid, null, Modifier.size(38.dp), tint = Color(0xFF0F766E)) } }
+            Spacer(Modifier.height(18.dp)); Text("PrestaPay", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black); Text("Tu operación financiera, clara y bajo control.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(26.dp))
+            OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, leadingIcon = { Icon(Icons.Default.Email, null) }, singleLine = true); Spacer(Modifier.height(10.dp))
+            OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Contraseña") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+            (error ?: googleError)?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp)) }; Spacer(Modifier.height(18.dp))
+            Button({ if (creating) register(email, password) else login(email, password) }, Modifier.fillMaxWidth().height(50.dp), enabled = email.isNotBlank() && password.length >= 6) { Text(if (creating) "Crear cuenta" else "Iniciar sesión", fontWeight = FontWeight.Bold) }
+            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) { HorizontalDivider(Modifier.weight(1f)); Text("  o  ", color = MaterialTheme.colorScheme.onSurfaceVariant); HorizontalDivider(Modifier.weight(1f)) }
+            OutlinedButton(::signInGoogle, Modifier.fillMaxWidth().height(50.dp)) { Text("G", fontWeight = FontWeight.Black); Spacer(Modifier.width(10.dp)); Text("Continuar con Google", fontWeight = FontWeight.Bold) }
+            TextButton({ creating = !creating }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (creating) "Ya tengo una cuenta" else "Crear una cuenta") }
+        } }
     }
 }
 

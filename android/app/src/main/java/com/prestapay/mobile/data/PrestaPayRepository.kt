@@ -1,6 +1,7 @@
 package com.prestapay.mobile.data
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.tasks.await
 
 class PrestaPayRepository(private val auth: FirebaseAuth, private val store: SessionStore) {
@@ -16,6 +17,7 @@ class PrestaPayRepository(private val auth: FirebaseAuth, private val store: Ses
     }
     suspend fun signIn(email: String, password: String) { auth.signInWithEmailAndPassword(email, password).await(); restoreTenant() }
     suspend fun register(email: String, password: String) { auth.createUserWithEmailAndPassword(email, password).await() }
+    suspend fun signInWithGoogle(idToken: String) { auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null)).await(); restoreTenant() }
     suspend fun createTenant(value: TenantCreate) { val created = api.createTenant(value); tenantId = created.tenant.id; store.saveTenantId(created.tenant.id) }
     suspend fun tenant() = api.tenant()
     suspend fun signOut() { auth.signOut(); tenantId = null; store.clear() }

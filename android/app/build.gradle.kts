@@ -27,6 +27,7 @@ android {
         buildConfigField("String", "FIREBASE_API_KEY", "\"${env("PRESTAPAY_FIREBASE_API_KEY")}\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"${env("PRESTAPAY_FIREBASE_APP_ID")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${env("PRESTAPAY_FIREBASE_PROJECT_ID", "prestamo-27ccb")}\"")
+        buildConfigField("String", "FIREBASE_WEB_CLIENT_ID", "\"${env("PRESTAPAY_FIREBASE_WEB_CLIENT_ID", "1098192394227-r0c4ma9pnu3dcli9qtj90ih51e3fbc1i.apps.googleusercontent.com")}\"")
     }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
@@ -38,6 +39,9 @@ android {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.12.0"))
     implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.compose.material3:material3:1.3.2")

@@ -13,3 +13,4 @@ android/**/build/
 *.keystore
 google-services.json
 service-account*.json
+artifacts/

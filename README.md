@@ -47,7 +47,9 @@ PRESTAPAY_FIREBASE_PROJECT_ID=...
 
 La URL debe terminar en `/`. Para el emulador local, el valor predeterminado es `http://10.0.2.2:8080/`. Compile con `gradle :app:assembleDebug` o desde Android Studio.
 
-La app usa autenticación nativa de Firebase con correo/contraseña y conserva la sesión mediante Firebase Auth; solo guarda el identificador del tenant en DataStore. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
+La app usa autenticación nativa de Firebase con correo/contraseña o Google mediante Credential Manager y conserva la sesión mediante Firebase Auth; solo guarda el identificador del tenant en DataStore. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
+
+La huella SHA-1 del keystore de desarrollo está registrada en Firebase. Antes de publicar en Play Store, registre también las huellas SHA-1/SHA-256 del keystore release o de Play App Signing.
 
 El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug.apk`. Para conectarlo fuera del emulador, reemplace `PRESTAPAY_API_URL` por una URL HTTPS alcanzable antes de compilar.
 
@@ -58,5 +60,6 @@ El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug
 - Conecte un proveedor de pagos mediante webhooks firmados para automatizar estados. El endpoint manual de Super Admin sirve para administración controlada, no sustituye un webhook.
 - Consulte [arquitectura](docs/ARCHITECTURE.md), [auditoría](docs/AUDIT.md) y [migración](data/migrations/README.md).
 - Consulte también el [contrato resumido del API](docs/API.md).
+- Para publicar la interfaz estática consulte la [guía de Hostinger](docs/HOSTINGER.md).
 
 No se incluye despliegue ni credenciales de producción.
