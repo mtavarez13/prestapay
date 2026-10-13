@@ -2,11 +2,11 @@
 
 ## Límites de confianza
 
-- Firebase Authentication emite la identidad. Ningún rol se deduce del correo.
+- Firebase Authentication emite la identidad. Los roles de empresa nunca se deducen del correo; la única excepción global es el correo verificado del Super Admin principal configurado explícitamente.
 - Cada registro operativo vive bajo `tenants/{tenantId}/...` y conserva `tenantId` como defensa adicional.
 - Las reglas de Firestore validan membresía, rol y `subscription.accessUntil` en cada escritura.
 - El API repite esas validaciones con Firebase Admin. Android consume el API; la web puede usar Firestore en tiempo real para operaciones autorizadas.
-- Solo el custom claim `superAdmin: true`, asignado fuera del cliente, permite administrar todas las empresas y suscripciones.
+- El correo verificado `martin.tavarez.gomez@gmail.com` y las identidades con el custom claim `superAdmin: true`, asignado fuera del cliente, pueden administrar todas las empresas y suscripciones.
 
 ## Colecciones
 

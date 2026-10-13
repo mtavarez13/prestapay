@@ -2,7 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function superAdmin() { return signedIn() && request.auth.token.superAdmin == true; }
+    function superAdmin() {
+      return signedIn() && (
+        request.auth.token.superAdmin == true
+        || (request.auth.token.email_verified == true
+          && request.auth.token.email == 'martin.tavarez.gomez@gmail.com')
+      );
+    }
     function tenantDoc(tenantId) { return get(/databases/$(database)/documents/tenants/$(tenantId)); }
     function membership(tenantId) { return get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)); }
     function activeMember(tenantId) {

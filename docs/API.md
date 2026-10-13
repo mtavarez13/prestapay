@@ -18,6 +18,6 @@ Todas las rutas bajo `/v1` requieren `Authorization: Bearer <Firebase ID token>`
 ## Administración
 
 - `GET /v1/members` y `POST /v1/members/by-email`: equipo y permisos por rol.
-- `GET /v1/admin/tenants` y `PUT /v1/admin/tenants/:tenantId/subscription`: requieren custom claim `superAdmin`.
+- `GET /v1/admin/tenants` y `PUT /v1/admin/tenants/:tenantId/subscription`: requieren el correo verificado del Super Admin principal o el custom claim `superAdmin`.
 
 Errores de validación usan HTTP 422; suscripción inactiva 402; rol insuficiente 403; conflictos financieros 409.

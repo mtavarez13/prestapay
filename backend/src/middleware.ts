@@ -2,6 +2,21 @@ import type { NextFunction, Request, Response } from 'express';
 import { adminAuth, adminDb } from './firebase.js';
 import { hasSubscriptionAccess } from './subscription.js';
 
+const configuredSuperAdmins = new Set(
+  (process.env.SUPER_ADMIN_EMAILS || 'martin.tavarez.gomez@gmail.com')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+export function isSuperAdmin(identity: Request['identity']): boolean {
+  if (!identity) return false;
+  if (identity.superAdmin === true) return true;
+  return identity.email_verified === true
+    && typeof identity.email === 'string'
+    && configuredSuperAdmins.has(identity.email.toLowerCase());
+}
+
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   const match = req.header('authorization')?.match(/^Bearer (.+)$/);
   if (!match?.[1]) return res.status(401).json({ error: 'missing_token' });
@@ -31,5 +46,5 @@ export function requireActiveSubscription(req: Request, res: Response, next: Nex
 }
 
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
-  return req.identity?.superAdmin === true ? next() : res.status(403).json({ error: 'super_admin_required' });
+  return isSuperAdmin(req.identity) ? next() : res.status(403).json({ error: 'super_admin_required' });
 }

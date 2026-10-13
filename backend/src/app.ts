@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { ZodError, type ZodType } from 'zod';
 import { adminAuth, adminDb } from './firebase.js';
-import { authenticate, requireActiveSubscription, requireRole, requireSuperAdmin, requireTenant } from './middleware.js';
+import { authenticate, isSuperAdmin, requireActiveSubscription, requireRole, requireSuperAdmin, requireTenant } from './middleware.js';
 import { articleSchema, clientSchema, loanSchema, membershipSchema, subscriptionSchema, tenantCreateSchema, transactionSchema } from './schemas.js';
 import { hasSubscriptionAccess } from './subscription.js';
 import { calculatePaymentBalance } from './payments.js';
@@ -26,7 +26,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.use('/v1', authenticate);
 app.get('/v1/me', async (req, res) => {
   const memberships = await adminDb.collection(`users/${req.identity!.uid}/memberships`).get();
-  res.json({ user: { uid: req.identity!.uid, email: req.identity!.email, superAdmin: req.identity!.superAdmin === true }, memberships: memberships.docs.map(x => ({ id: x.id, ...x.data() })) });
+  res.json({ user: { uid: req.identity!.uid, email: req.identity!.email, superAdmin: isSuperAdmin(req.identity) }, memberships: memberships.docs.map(x => ({ id: x.id, ...x.data() })) });
 });
 
 app.post('/v1/tenants', async (req, res) => {

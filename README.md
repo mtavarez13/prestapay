@@ -55,7 +55,7 @@ El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug
 
 ## Seguridad y operación
 
-- Asigne el claim `superAdmin: true` únicamente desde un entorno administrativo seguro con Firebase Admin SDK.
+- La cuenta verificada `martin.tavarez.gomez@gmail.com` es el Super Admin principal. Cuentas adicionales deben configurarse con `SUPER_ADMIN_EMAILS` en el API y mediante el claim `superAdmin: true` desde Firebase Admin SDK.
 - Publique las reglas con Firebase CLI solo después de probarlas contra un proyecto de staging.
 - Conecte un proveedor de pagos mediante webhooks firmados para automatizar estados. El endpoint manual de Super Admin sirve para administración controlada, no sustituye un webhook.
 - Consulte [arquitectura](docs/ARCHITECTURE.md), [auditoría](docs/AUDIT.md) y [migración](data/migrations/README.md).

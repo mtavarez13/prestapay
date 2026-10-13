@@ -2,6 +2,13 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
+    function superAdmin() {
+      return signedIn() && (
+        request.auth.token.superAdmin == true
+        || (request.auth.token.email_verified == true
+          && request.auth.token.email == 'martin.tavarez.gomez@gmail.com')
+      );
+    }
     function member(tenantId) {
       return signedIn() && firestore.exists(/databases/(default)/documents/tenants/$(tenantId)/members/$(request.auth.uid));
     }
@@ -9,8 +16,8 @@ service firebase.storage {
       return member(tenantId) && firestore.get(/databases/(default)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
     }
     match /tenants/{tenantId}/branding/{fileName} {
-      allow read: if member(tenantId);
-      allow write: if manager(tenantId) && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow read: if superAdmin() || member(tenantId);
+      allow write: if (superAdmin() || manager(tenantId)) && request.resource.size < 2 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
     }
     match /{allPaths=**} { allow read, write: if false; }
   }

@@ -1,7 +1,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { Timestamp, doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
+import { Timestamp, doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 
 let environment;
 const uid = 'legacy-admin-user';
@@ -37,4 +37,22 @@ test('an existing legacy admin profile can create its first tenant atomically', 
 test('a user cannot create a tenant owned by somebody else', async () => {
   const db = environment.authenticatedContext(uid).firestore();
   await assertFails(setDoc(doc(db, 'tenants', 'foreign'), { id: 'foreign', ownerId: 'another-user', status: 'active', subscription: { status: 'trialing', accessUntil: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000) } }));
+});
+
+test('the verified primary administrator can read every tenant', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'tenants', 'company-a'), { ownerId: 'owner-a' });
+  });
+  const db = environment.authenticatedContext('global-admin', {
+    email: 'martin.tavarez.gomez@gmail.com', email_verified: true,
+  }).firestore();
+  await assertSucceeds(setDoc(doc(db, 'plans', 'standard'), { name: 'Standard' }));
+  await assertSucceeds(getDoc(doc(db, 'tenants', 'company-a')));
+});
+
+test('the primary administrator email requires a verified identity', async () => {
+  const db = environment.authenticatedContext('unverified-admin', {
+    email: 'martin.tavarez.gomez@gmail.com', email_verified: false,
+  }).firestore();
+  await assertFails(setDoc(doc(db, 'plans', 'blocked'), { name: 'Blocked' }));
 });
