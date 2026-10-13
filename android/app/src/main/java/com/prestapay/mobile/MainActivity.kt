@@ -1,6 +1,8 @@
 package com.prestapay.mobile
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -38,6 +40,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
@@ -90,7 +94,7 @@ private data class Destination(val label: String, val icon: androidx.compose.ui.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MainShell(vm: MainViewModel) {
-    val destinations = listOf(Destination("Inicio", Icons.Default.Home), Destination("Clientes", Icons.Default.People), Destination("Préstamos", Icons.Default.AccountBalance), Destination("Inventario", Icons.Default.Inventory2), Destination("Caja", Icons.Default.Receipt), Destination("Imprimir", Icons.Default.Print))
+    val destinations = listOf(Destination("Inicio", Icons.Default.Home), Destination("Clientes", Icons.Default.People), Destination("Préstamos", Icons.Default.AccountBalance), Destination("Inventario", Icons.Default.Inventory2), Destination("Caja", Icons.Default.Receipt), Destination("Cobros", Icons.Default.Notifications), Destination("Reportes", Icons.Default.Assessment), Destination("Imprimir", Icons.Default.Print))
     var selected by remember { mutableIntStateOf(0) }; val state = vm.state; val active = state.tenant?.subscription?.accessAllowed == true; val permissions = state.membership?.permissions ?: Permissions()
     Scaffold(topBar = { TopAppBar(title = { Text(state.tenant?.branding?.businessName ?: "PrestaPay") }, actions = { IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "Actualizar") }; IconButton(vm::logout) { Icon(Icons.AutoMirrored.Filled.Logout, "Salir") } }) },
         bottomBar = { NavigationBar { destinations.forEachIndexed { index, d -> NavigationBarItem(selected = selected == index, onClick = { selected = index }, icon = { Icon(d.icon, null) }, label = { Text(d.label, maxLines = 1) }) } } }) { padding ->
@@ -101,6 +105,8 @@ private data class Destination(val label: String, val icon: androidx.compose.ui.
                 2 -> LoanScreen(state.loans, state.clients, active && permissions.manageLoans, vm::createLoan)
                 3 -> ArticleScreen(state.articles, state.clients, state.loans, active && permissions.manageInventory, vm::createArticle)
                 4 -> CashScreen(state.transactions, state.loans, active && permissions.manageCash, vm::createTransaction)
+                5 -> NotificationsScreen(state.loans, state.clients)
+                6 -> ReportsScreen(state.loans, state.clients)
                 else -> PrintScreen(state.tenant)
             }
             if (!active && state.tenant != null) Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) { Text("Suscripción ${state.tenant.subscription.status}: operaciones bloqueadas", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer) }
@@ -109,8 +115,33 @@ private data class Destination(val label: String, val icon: androidx.compose.ui.
     }
 }
 
-@Composable private fun Dashboard(vm: MainViewModel) { val s = vm.state.summary; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Resumen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; vm.state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }; s?.let { item { Metric("Capital invertido", "DOP ${it.capitalInvested}") }; item { Metric("Préstamos al día", it.onTimeLoans.toString()) }; item { Metric("Préstamos atrasados", it.overdueLoans.toString()) }; item { Metric("Clientes activos", it.activeClients.toString()) } } } }
+@Composable private fun Dashboard(vm: MainViewModel) { val s = vm.state.summary; val context = LocalContext.current; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Resumen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; vm.state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }; s?.let { item { Metric("Capital invertido", "DOP ${it.capitalInvested}") }; item { Metric("Préstamos al día", it.onTimeLoans.toString()) }; item { Metric("Préstamos atrasados", it.overdueLoans.toString()) }; item { Metric("Clientes activos", it.activeClients.toString()) } }; item { TextButton({ context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/inmartagosrl/"))) }, Modifier.fillMaxWidth()) { Text("Sistema desarrollado por @inmartagosrl") } } } }
 @Composable private fun Metric(label: String, value: String) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) } } }
+
+private fun dominicanDate(value: String?): LocalDate? = runCatching { Instant.parse(value).atZone(ZoneId.of("America/Santo_Domingo")).toLocalDate() }.getOrNull()
+
+@Composable private fun NotificationsScreen(loans: List<Loan>, clients: List<Client>) {
+    val today = LocalDate.now(ZoneId.of("America/Santo_Domingo")); val open = loans.filter { it.status != "pagado" }
+    val dueToday = open.filter { dominicanDate(it.nextPaymentDate ?: it.dueDate) == today }; val overdue = open.filter { dominicanDate(it.nextPaymentDate ?: it.dueDate)?.isBefore(today) == true }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("Centro de cobros", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("${dueToday.size} para cobrar hoy · ${overdue.size} atrasados") }
+        item { Text("Cobrar hoy", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (dueToday.isEmpty()) item { Text("No hay cobros programados para hoy.") }
+        items(dueToday) { loan -> CollectionCard(loan, clients, false) }
+        item { Text("Atrasados", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)) }
+        if (overdue.isEmpty()) item { Text("No hay cobros atrasados.") }
+        items(overdue) { loan -> CollectionCard(loan, clients, true) }
+    }
+}
+
+@Composable private fun CollectionCard(loan: Loan, clients: List<Client>, late: Boolean) { val client = clients.find { it.id == loan.clientId }; ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = if (late) MaterialTheme.colorScheme.errorContainer else Color(0xFFFFF7D6))) { Column(Modifier.padding(16.dp)) { Text(loan.clientName ?: client?.name ?: loan.clientId, fontWeight = FontWeight.Bold); Text(client?.phone.orEmpty()); Text(if (late) "ATRASADO" else "COBRAR HOY", color = if (late) MaterialTheme.colorScheme.error else Color(0xFF92400E), fontWeight = FontWeight.Black); Text("Cuota DOP ${loan.installmentAmount ?: 0.0}") } } }
+
+@Composable private fun ReportsScreen(loans: List<Loan>, clients: List<Client>) {
+    val today = LocalDate.now(ZoneId.of("America/Santo_Domingo")); var from by remember { mutableStateOf(today.withDayOfMonth(1).toString()) }; var to by remember { mutableStateOf(today.toString()) }
+    fun inRange(value: String?): Boolean { val date = dominicanDate(value) ?: return false; val start = runCatching { LocalDate.parse(from) }.getOrNull() ?: return false; val end = runCatching { LocalDate.parse(to) }.getOrNull() ?: return false; return !date.isBefore(start) && !date.isAfter(end) }
+    val rangeLoans = loans.filter { inRange(it.createdAt) }; val rangeClients = clients.filter { inRange(it.createdAt) }; val capital = rangeLoans.sumOf { it.capital }; val profit = rangeLoans.sumOf { it.interestAmount ?: (it.capital * it.rate / 100.0) }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { item { Text("Reportes", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(from, { from = it }, Modifier.weight(1f), label = { Text("Desde") }); OutlinedTextField(to, { to = it }, Modifier.weight(1f), label = { Text("Hasta") }) } }; item { Metric("Clientes creados", rangeClients.size.toString()) }; item { Metric("Préstamos creados", rangeLoans.size.toString()) }; item { Metric("Capital colocado", "DOP $capital") }; item { Metric("Beneficio proyectado", "DOP $profit") }; items(rangeLoans) { loan -> ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) { Text(loan.clientName ?: loan.clientId, fontWeight = FontWeight.Bold); Text("Capital DOP ${loan.capital} · Beneficio DOP ${loan.interestAmount ?: (loan.capital * loan.rate / 100.0)}") } } }; item { Text("El beneficio es una proyección y no sustituye un estado contable o fiscal.", style = MaterialTheme.typography.bodySmall) } }
+}
 
 @Composable private fun ScreenHeader(title: String, canAdd: Boolean, onAdd: () -> Unit) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); FilledIconButton(onAdd, enabled = canAdd) { Icon(Icons.Default.Add, "Agregar") } } }
 

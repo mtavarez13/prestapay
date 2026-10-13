@@ -13,6 +13,12 @@ import { calculatePaymentBalance } from './payments.js';
 import { addPaymentPeriod, asDate, isPastDue, type PaymentFrequency } from './loans.js';
 
 export const app = express();
+function jsonValue(value: unknown): unknown {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (Array.isArray(value)) return value.map(jsonValue);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonValue(item)]));
+  return value;
+}
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: { directives: {
   defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
@@ -64,7 +70,7 @@ const writeRoles: Record<Resource, string[]> = { clients: ['owner','admin','appr
 for (const resource of Object.keys(schemas) as Resource[]) {
   app.get(`/v1/${resource}`, requireTenant, async (req, res) => {
     const snapshot = await adminDb.collection(`tenants/${req.tenant!.id}/${resource}`).orderBy('createdAt', 'desc').limit(250).get();
-    res.json({ data: snapshot.docs.map(x => ({ id: x.id, ...x.data() })) });
+    res.json({ data: snapshot.docs.map(x => ({ id: x.id, ...(jsonValue(x.data()) as Record<string, unknown>) })) });
   });
   app.post(`/v1/${resource}`, requireTenant, requireActiveSubscription, requireRole(...writeRoles[resource]), async (req, res) => {
     const data = schemas[resource].parse(req.body) as Record<string, unknown>; const tenantId = req.tenant!.id; const now = FieldValue.serverTimestamp();
