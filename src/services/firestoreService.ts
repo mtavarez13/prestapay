@@ -26,6 +26,13 @@ export const firestoreService = {
     } catch (error) { return fail(error, OperationType.GET, `${path}/${id}`); }
   },
   async getTenant(tenantId: string): Promise<Tenant | null> { return this.getDocument('tenants', tenantId) as Promise<Tenant | null>; },
+  async listTenants(): Promise<Tenant[]> {
+    const path = 'tenants';
+    try {
+      const snapshot = await getDocs(collection(db, path));
+      return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Tenant));
+    } catch (error) { return fail(error, OperationType.LIST, path); }
+  },
   async getTenantCollection<T>(tenantId: string, name: string, constraints: QueryConstraint[] = []): Promise<T[]> {
     const path = tenantPath(tenantId, name);
     try {
