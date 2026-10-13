@@ -15,6 +15,9 @@ class PrestaPayRepository(private val auth: FirebaseAuth, private val store: Ses
         return tenantId != null
     }
     suspend fun signIn(email: String, password: String) { auth.signInWithEmailAndPassword(email, password).await(); restoreTenant() }
+    suspend fun register(email: String, password: String) { auth.createUserWithEmailAndPassword(email, password).await() }
+    suspend fun createTenant(value: TenantCreate) { val created = api.createTenant(value); tenantId = created.tenant.id; store.saveTenantId(created.tenant.id) }
+    suspend fun tenant() = api.tenant()
     suspend fun signOut() { auth.signOut(); tenantId = null; store.clear() }
     fun signedIn() = auth.currentUser != null
     suspend fun summary() = api.summary()
@@ -22,4 +25,8 @@ class PrestaPayRepository(private val auth: FirebaseAuth, private val store: Ses
     suspend fun loans() = api.loans().data
     suspend fun articles() = api.articles().data
     suspend fun transactions() = api.transactions().data
+    suspend fun createClient(value: ClientCreate) = api.createClient(value)
+    suspend fun createLoan(value: LoanCreate) = api.createLoan(value)
+    suspend fun createArticle(value: ArticleCreate) = api.createArticle(value)
+    suspend fun createTransaction(value: TransactionCreate) = api.createTransaction(value)
 }

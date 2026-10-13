@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,57 +21,117 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.prestapay.mobile.data.ReceiptModel
+import com.prestapay.mobile.data.*
 import com.prestapay.mobile.printing.PairedPrinter
 import com.prestapay.mobile.printing.ThermalPrinter
 import com.prestapay.mobile.ui.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { PrestaPayTheme { PrestaPayApp(viewModel) } } }
 }
 
-@Composable private fun PrestaPayTheme(content: @Composable () -> Unit) { MaterialTheme(colorScheme = lightColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF4F46E5), secondary = androidx.compose.ui.graphics.Color(0xFF10B981)), content = content) }
+@Composable private fun PrestaPayTheme(content: @Composable () -> Unit) = MaterialTheme(
+    colorScheme = lightColorScheme(primary = androidx.compose.ui.graphics.Color(0xFF4F46E5), secondary = androidx.compose.ui.graphics.Color(0xFF10B981)), content = content
+)
 
 @Composable private fun PrestaPayApp(vm: MainViewModel) {
     val state = vm.state
-    when { state.loading && !state.signedIn -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        !state.signedIn -> LoginScreen(state.error, vm::login)
-        else -> MainShell(vm) }
+    when {
+        state.loading && !state.signedIn -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        !state.signedIn -> LoginScreen(state.error, vm::login, vm::register)
+        state.needsTenant -> TenantOnboarding(state.error, vm::createTenant)
+        else -> MainShell(vm)
+    }
 }
 
-@Composable private fun LoginScreen(error: String?, login: (String, String) -> Unit) {
-    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
+@Composable private fun LoginScreen(error: String?, login: (String, String) -> Unit, register: (String, String) -> Unit) {
+    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var creating by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Text("PrestaPay", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black); Text("Aplicación nativa segura", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(32.dp))
-        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, singleLine = true); Spacer(Modifier.height(12.dp))
+        Text("PrestaPay", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black); Text("Gestión de préstamos para tu empresa", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(30.dp))
+        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, singleLine = true); Spacer(Modifier.height(10.dp))
         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Contraseña") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }; Spacer(Modifier.height(20.dp))
-        Button({ login(email, password) }, Modifier.fillMaxWidth(), enabled = email.isNotBlank() && password.isNotBlank()) { Text("Iniciar sesión") }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp)) }; Spacer(Modifier.height(18.dp))
+        Button({ if (creating) register(email, password) else login(email, password) }, Modifier.fillMaxWidth(), enabled = email.isNotBlank() && password.length >= 6) { Text(if (creating) "Crear cuenta" else "Iniciar sesión") }
+        TextButton({ creating = !creating }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (creating) "Ya tengo una cuenta" else "Crear una cuenta") }
+    }
+}
+
+@Composable private fun TenantOnboarding(error: String?, create: (String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }; var taxId by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
+        Text("Crea tu empresa", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black); Text("Comienza con 14 días de prueba."); Spacer(Modifier.height(24.dp))
+        OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Nombre comercial") }); Spacer(Modifier.height(10.dp)); OutlinedTextField(taxId, { taxId = it }, Modifier.fillMaxWidth(), label = { Text("RNC / identificación fiscal") })
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp)) }; Spacer(Modifier.height(18.dp)); Button({ create(name, taxId) }, Modifier.fillMaxWidth(), enabled = name.length >= 2) { Text("Crear empresa") }
     }
 }
 
 private data class Destination(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MainShell(vm: MainViewModel) {
     val destinations = listOf(Destination("Inicio", Icons.Default.Home), Destination("Clientes", Icons.Default.People), Destination("Préstamos", Icons.Default.AccountBalance), Destination("Inventario", Icons.Default.Inventory2), Destination("Caja", Icons.Default.Receipt), Destination("Imprimir", Icons.Default.Print))
-    var selected by remember { mutableIntStateOf(0) }
-    Scaffold(topBar = { TopAppBar(title = { Text("PrestaPay") }, actions = { IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "Actualizar") }; IconButton(vm::logout) { Icon(Icons.Default.Logout, "Salir") } }) }, bottomBar = { NavigationBar { destinations.forEachIndexed { index, d -> NavigationBarItem(selected = selected == index, onClick = { selected = index }, icon = { Icon(d.icon, null) }, label = { Text(d.label, maxLines = 1) }) } } }) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) { when(selected) { 0 -> Dashboard(vm); 1 -> SimpleList("Clientes", vm.state.clients) { item: com.prestapay.mobile.data.Client -> item.name + "\n" + item.phone }; 2 -> SimpleList("Préstamos", vm.state.loans) { item: com.prestapay.mobile.data.Loan -> (item.clientName ?: item.clientId) + " · ${item.status}\nBalance DOP ${item.balance}" }; 3 -> SimpleList("Inventario", vm.state.articles) { item: com.prestapay.mobile.data.Article -> item.name + " · " + item.state }; 4 -> SimpleList("Caja", vm.state.transactions) { item: com.prestapay.mobile.data.CashTransaction -> "${item.type}: DOP ${item.amount}\n${item.description.orEmpty()}" }; else -> PrintScreen() } }
+    var selected by remember { mutableIntStateOf(0) }; val state = vm.state; val active = state.tenant?.subscription?.accessAllowed == true; val permissions = state.membership?.permissions ?: Permissions()
+    Scaffold(topBar = { TopAppBar(title = { Text(state.tenant?.branding?.businessName ?: "PrestaPay") }, actions = { IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "Actualizar") }; IconButton(vm::logout) { Icon(Icons.AutoMirrored.Filled.Logout, "Salir") } }) },
+        bottomBar = { NavigationBar { destinations.forEachIndexed { index, d -> NavigationBarItem(selected = selected == index, onClick = { selected = index }, icon = { Icon(d.icon, null) }, label = { Text(d.label, maxLines = 1) }) } } }) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            when (selected) {
+                0 -> Dashboard(vm)
+                1 -> ClientScreen(state.clients, active && permissions.manageClients, vm::createClient)
+                2 -> LoanScreen(state.loans, state.clients, active && permissions.manageLoans, vm::createLoan)
+                3 -> ArticleScreen(state.articles, state.clients, state.loans, active && permissions.manageInventory, vm::createArticle)
+                4 -> CashScreen(state.transactions, state.loans, active && permissions.manageCash, vm::createTransaction)
+                else -> PrintScreen(state.tenant)
+            }
+            if (!active && state.tenant != null) Surface(Modifier.fillMaxWidth().align(Alignment.TopCenter), color = MaterialTheme.colorScheme.errorContainer) { Text("Suscripción ${state.tenant.subscription.status}: operaciones bloqueadas", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer) }
+            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+        }
     }
 }
 
-@Composable private fun Dashboard(vm: MainViewModel) { val s = vm.state.summary; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Resumen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; if (vm.state.error != null) item { Text(vm.state.error!!, color = MaterialTheme.colorScheme.error) }; if (s != null) { item { Metric("Capital pendiente", "DOP ${s.outstandingBalance}") }; item { Metric("Préstamos activos", s.activeLoans.toString()) }; item { Metric("Clientes", s.clients.toString()) }; item { Metric("Artículos", s.heldArticles.toString()) } } } }
+@Composable private fun Dashboard(vm: MainViewModel) { val s = vm.state.summary; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { item { Text("Resumen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; vm.state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }; s?.let { item { Metric("Capital pendiente", "DOP ${it.outstandingBalance}") }; item { Metric("Préstamos activos", it.activeLoans.toString()) }; item { Metric("Clientes", it.clients.toString()) }; item { Metric("Artículos", it.heldArticles.toString()) } } } }
 @Composable private fun Metric(label: String, value: String) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) } } }
-@Composable private fun <T> SimpleList(title: String, values: List<T>, text: (T) -> String) { LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black) }; if (values.isEmpty()) item { Text("No hay registros.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Text(text(it), Modifier.padding(16.dp)) } } } }
 
-@Composable private fun PrintScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current; val printer = remember { ThermalPrinter(context) }; val scope = rememberCoroutineScope(); var devices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }; var status by remember { mutableStateOf("") }; var width by remember { mutableIntStateOf(80) }
+@Composable private fun ScreenHeader(title: String, canAdd: Boolean, onAdd: () -> Unit) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); FilledIconButton(onAdd, enabled = canAdd) { Icon(Icons.Default.Add, "Agregar") } } }
+
+@Composable private fun ClientScreen(values: List<Client>, canWrite: Boolean, create: (ClientCreate) -> Unit) {
+    var dialog by remember { mutableStateOf(false) }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Clientes", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay clientes registrados.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(it.name, fontWeight = FontWeight.Bold); Text(it.phone); Text(it.address, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } }; if (dialog) ClientDialog({ dialog = false }) { create(it); dialog = false }
+}
+
+@Composable private fun ClientDialog(close: () -> Unit, submit: (ClientCreate) -> Unit) { var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var address by remember { mutableStateOf("") }; FormDialog("Nuevo cliente", close, name.length >= 2, { submit(ClientCreate(name, phone, address)) }) { OutlinedTextField(name, { name = it }, label = { Text("Nombre") }); OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") }); OutlinedTextField(address, { address = it }, label = { Text("Dirección") }) } }
+
+@Composable private fun LoanScreen(values: List<Loan>, clients: List<Client>, canWrite: Boolean, create: (LoanCreate) -> Unit) {
+    var dialog by remember { mutableStateOf(false) }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Préstamos", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay préstamos registrados.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(it.clientName ?: it.clientId, fontWeight = FontWeight.Bold); Text("${it.type} · ${it.status}"); Text("Balance DOP ${it.balance}") } } } }; if (dialog) LoanDialog(clients, { dialog = false }) { create(it); dialog = false }
+}
+
+@Composable private fun LoanDialog(clients: List<Client>, close: () -> Unit, submit: (LoanCreate) -> Unit) {
+    var selected by remember { mutableStateOf<Client?>(clients.firstOrNull()) }; var expanded by remember { mutableStateOf(false) }; var capital by remember { mutableStateOf("") }; var rate by remember { mutableStateOf("10") }; var installments by remember { mutableStateOf("1") }; var type by remember { mutableStateOf("prenda") }; var dueDate by remember { mutableStateOf(LocalDate.now().plusMonths(1).toString()) }
+    FormDialog("Nuevo préstamo", close, selected != null && capital.toDoubleOrNull()?.let { it > 0 } == true, { val amount = capital.toDouble(); submit(LoanCreate(selected!!.id, selected!!.name, type, amount, rate.toDoubleOrNull() ?: 0.0, installments.toIntOrNull() ?: 1, amount, dueDate = "${dueDate}T23:59:59Z")) }) {
+        Box { OutlinedButton({ expanded = true }, Modifier.fillMaxWidth()) { Text(selected?.name ?: "Selecciona un cliente") }; DropdownMenu(expanded, { expanded = false }) { clients.forEach { DropdownMenuItem({ Text(it.name) }, { selected = it; expanded = false }) } } }
+        OutlinedTextField(capital, { capital = it }, label = { Text("Capital") }); OutlinedTextField(rate, { rate = it }, label = { Text("Tasa %") }); OutlinedTextField(installments, { installments = it }, label = { Text("Cuotas") }); OutlinedTextField(type, { type = it }, label = { Text("Tipo: prenda, sin_garantia, hipotecario") }); OutlinedTextField(dueDate, { dueDate = it }, label = { Text("Vencimiento AAAA-MM-DD") })
+    }
+}
+
+@Composable private fun ArticleScreen(values: List<Article>, clients: List<Client>, loans: List<Loan>, canWrite: Boolean, create: (ArticleCreate) -> Unit) {
+    var dialog by remember { mutableStateOf(false) }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Inventario", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay artículos registrados.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(it.name, fontWeight = FontWeight.Bold); Text("${it.brand} · ${it.category}"); Text(it.state) } } } }; if (dialog) ArticleDialog(clients, loans, { dialog = false }) { create(it); dialog = false }
+}
+
+@Composable private fun ArticleDialog(clients: List<Client>, loans: List<Loan>, close: () -> Unit, submit: (ArticleCreate) -> Unit) { var name by remember { mutableStateOf("") }; var category by remember { mutableStateOf("") }; var brand by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var loanId by remember { mutableStateOf("") }; FormDialog("Nuevo artículo", close, name.length >= 2 && category.isNotBlank(), { val loan = loans.find { it.id == loanId }; submit(ArticleCreate(name, category, brand, description = description, contractId = loan?.id, clientId = loan?.clientId)) }) { OutlinedTextField(name, { name = it }, label = { Text("Artículo") }); OutlinedTextField(category, { category = it }, label = { Text("Categoría") }); OutlinedTextField(brand, { brand = it }, label = { Text("Marca") }); OutlinedTextField(loanId, { loanId = it }, label = { Text("ID préstamo opcional") }); OutlinedTextField(description, { description = it }, label = { Text("Descripción") }) } }
+
+@Composable private fun CashScreen(values: List<CashTransaction>, loans: List<Loan>, canWrite: Boolean, create: (TransactionCreate) -> Unit) { var dialog by remember { mutableStateOf(false) }; val balance = values.sumOf { if (it.type == "ingreso") it.amount else -it.amount }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Caja · DOP $balance", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay movimientos.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.description ?: it.type); Text("${if (it.type == "ingreso") "+" else "-"}${it.amount}", fontWeight = FontWeight.Bold) } } } }; if (dialog) TransactionDialog(loans, { dialog = false }) { create(it); dialog = false } }
+
+@Composable private fun TransactionDialog(loans: List<Loan>, close: () -> Unit, submit: (TransactionCreate) -> Unit) { var amount by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var type by remember { mutableStateOf("ingreso") }; var loanId by remember { mutableStateOf("") }; FormDialog("Movimiento de caja", close, amount.toDoubleOrNull()?.let { it > 0 } == true && description.isNotBlank(), { submit(TransactionCreate(loanId.ifBlank { null }, type, amount.toDouble(), description)) }) { OutlinedTextField(amount, { amount = it }, label = { Text("Monto") }); OutlinedTextField(description, { description = it }, label = { Text("Descripción") }); OutlinedTextField(type, { type = it }, label = { Text("ingreso o egreso") }); OutlinedTextField(loanId, { loanId = it }, label = { Text("ID préstamo si es abono") }); if (loans.isNotEmpty()) Text("Préstamos: ${loans.joinToString { "${it.id.take(6)} ${it.clientName.orEmpty()}" }}", style = MaterialTheme.typography.bodySmall) } }
+
+@Composable private fun FormDialog(title: String, close: () -> Unit, valid: Boolean, submit: () -> Unit, fields: @Composable ColumnScope.() -> Unit) { AlertDialog(onDismissRequest = close, title = { Text(title) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = fields) }, confirmButton = { Button(submit, enabled = valid) { Text("Guardar") } }, dismissButton = { TextButton(close) { Text("Cancelar") } }) }
+
+@Composable private fun PrintScreen(tenant: TenantInfo?) {
+    val context = androidx.compose.ui.platform.LocalContext.current; val printer = remember { ThermalPrinter(context) }; val scope = rememberCoroutineScope(); var devices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }; var status by remember { mutableStateOf("") }; var width by remember(tenant?.printer?.paperWidth) { mutableIntStateOf(tenant?.printer?.paperWidth ?: 80) }; val brand = tenant?.branding ?: BrandingInfo(); val printerSettings = tenant?.printer ?: PrinterInfo()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) devices = printer.paired() else status = "Permiso Bluetooth denegado" }
     fun load() { if (Build.VERSION.SDK_INT >= 31 && !printer.hasPermission()) permission.launch(Manifest.permission.BLUETOOTH_CONNECT) else devices = printer.paired() }
     LaunchedEffect(Unit) { load() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) { Text("Impresión térmica", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("Selecciona 58 u 80 mm y una impresora Bluetooth vinculada."); Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(width == 58, { width = 58 }); Text("58 mm"); RadioButton(width == 80, { width = 80 }); Text("80 mm") }; devices.forEach { device -> Button(onClick = { scope.launch { status = "Imprimiendo…"; runCatching { withContext(Dispatchers.IO) { printer.print(device.address, ReceiptModel("PrestaPay", "", "Santo Domingo", "", "MUESTRA-001", "Cliente de ejemplo", "Abono de préstamo", 1500.0, paperWidth = width)) } }.onSuccess { status = "Impresión enviada" }.onFailure { status = it.message ?: "Error de impresión" } } }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("${device.name} · ${device.address}") } }; if (devices.isEmpty()) Text("No hay impresoras vinculadas. Vincúlala primero en Ajustes de Android."); Text(status, modifier = Modifier.padding(top = 12.dp)) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) { Text("Impresión térmica", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("Selecciona 58 u 80 mm y una impresora Bluetooth vinculada."); Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(width == 58, { width = 58 }); Text("58 mm"); RadioButton(width == 80, { width = 80 }); Text("80 mm") }; devices.forEach { device -> Button(onClick = { scope.launch { status = "Imprimiendo…"; runCatching { withContext(Dispatchers.IO) { printer.print(device.address, ReceiptModel(brand.businessName, brand.taxId, brand.address, brand.phone, "MUESTRA-001", "Cliente de ejemplo", "Abono de préstamo", 1500.0, currency = brand.currency, footer = printerSettings.footer, paperWidth = width)) } }.onSuccess { status = "Impresión enviada" }.onFailure { status = it.message ?: "Error de impresión" } } }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text("${device.name} · ${device.address}") } }; if (devices.isEmpty()) Text("No hay impresoras vinculadas. Vincúlala primero en Ajustes de Android."); Text(status, modifier = Modifier.padding(top = 12.dp)) }
 }

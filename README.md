@@ -49,11 +49,14 @@ La URL debe terminar en `/`. Para el emulador local, el valor predeterminado es 
 
 La app usa autenticación nativa de Firebase con correo/contraseña y conserva la sesión mediante Firebase Auth; solo guarda el identificador del tenant en DataStore. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
 
+El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug.apk`. Para conectarlo fuera del emulador, reemplace `PRESTAPAY_API_URL` por una URL HTTPS alcanzable antes de compilar.
+
 ## Seguridad y operación
 
 - Asigne el claim `superAdmin: true` únicamente desde un entorno administrativo seguro con Firebase Admin SDK.
 - Publique las reglas con Firebase CLI solo después de probarlas contra un proyecto de staging.
 - Conecte un proveedor de pagos mediante webhooks firmados para automatizar estados. El endpoint manual de Super Admin sirve para administración controlada, no sustituye un webhook.
 - Consulte [arquitectura](docs/ARCHITECTURE.md), [auditoría](docs/AUDIT.md) y [migración](data/migrations/README.md).
+- Consulte también el [contrato resumido del API](docs/API.md).
 
 No se incluye despliegue ni credenciales de producción.

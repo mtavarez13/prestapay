@@ -79,8 +79,9 @@ service cloud.firestore {
       }
       match /transactions/{id} {
         allow read: if superAdmin() || activeMember(tenantId);
-        allow create: if subscriptionActive(tenantId) && roleIn(tenantId, ['owner','admin','cashier']) && validNewTenantEntity(tenantId);
-        allow update, delete: if false;
+        // Movimientos y recibos se crean juntos mediante la API Admin en una
+        // transacción atómica; ningún cliente puede falsificar saldos.
+        allow create, update, delete: if false;
       }
       match /fixedExpenses/{id} {
         allow read: if superAdmin() || activeMember(tenantId);
