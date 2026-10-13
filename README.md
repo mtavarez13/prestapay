@@ -46,13 +46,13 @@ PRESTAPAY_FIREBASE_APP_ID=...
 PRESTAPAY_FIREBASE_PROJECT_ID=...
 ```
 
-La URL debe terminar en `/`. Para el emulador local, el valor predeterminado es `http://10.0.2.2:8080/`. Compile con `gradle :app:assembleDebug` o desde Android Studio.
+La URL debe terminar en `/`. Para el emulador local, el valor predeterminado es `http://10.0.2.2:8080/`. Compile con `gradle :app:assembleDebug` o `gradle :app:assembleRelease` desde Android Studio/JDK 17.
 
-La app usa autenticación nativa de Firebase con correo/contraseña o Google mediante Credential Manager y conserva la sesión mediante Firebase Auth; solo guarda el identificador del tenant en DataStore. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
+La app usa autenticación nativa de Firebase con correo/contraseña o Google mediante Credential Manager y conserva la sesión mediante Firebase Auth. Firestore mantiene caché persistente, listeners en tiempo real y una cola offline para clientes, préstamos e inventario; caja continúa usando el API por requerir una transacción atómica. Incluye tema de sistema, claro y oscuro guardado en DataStore, además de recordatorios diarios locales de cobros mediante WorkManager. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
 
 La huella SHA-1 del keystore de desarrollo está registrada en Firebase. Antes de publicar en Play Store, registre también las huellas SHA-1/SHA-256 del keystore release o de Play App Signing.
 
-El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug.apk`. Para conectarlo fuera del emulador, reemplace `PRESTAPAY_API_URL` por una URL HTTPS alcanzable antes de compilar.
+Los APK se generan en `android/app/build/outputs/apk/debug/app-debug.apk` y `android/app/build/outputs/apk/release/app-release.apk`. La configuración actual firma Release con la clave de desarrollo únicamente para pruebas; use una clave privada de publicación antes de Play Store. Para conectarlo fuera del emulador, reemplace `PRESTAPAY_API_URL` por una URL HTTPS alcanzable antes de compilar.
 
 ## Seguridad y operación
 

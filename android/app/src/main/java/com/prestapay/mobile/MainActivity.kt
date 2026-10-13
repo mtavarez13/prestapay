@@ -14,6 +14,7 @@ import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,6 +36,7 @@ import com.prestapay.mobile.printing.PairedPrinter
 import com.prestapay.mobile.printing.LoanContractPdf
 import com.prestapay.mobile.printing.ThermalPrinter
 import com.prestapay.mobile.ui.MainViewModel
+import com.prestapay.mobile.ui.ThemeMode
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.Dispatchers
@@ -46,12 +48,25 @@ import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { PrestaPayTheme { PrestaPayApp(viewModel) } } }
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        setContent { PrestaPayTheme(viewModel.state.themeMode) { PrestaPayApp(viewModel) } }
+    }
 }
 
-@Composable private fun PrestaPayTheme(content: @Composable () -> Unit) = MaterialTheme(
-    colorScheme = lightColorScheme(primary = Color(0xFF0F766E), secondary = Color(0xFFF59E0B), surface = Color(0xFFFAFAF8), surfaceContainer = Color.White, background = Color(0xFFF4F7F6)), content = content
-)
+@Composable private fun PrestaPayTheme(mode: ThemeMode, content: @Composable () -> Unit) {
+    val dark = when (mode) { ThemeMode.DARK -> true; ThemeMode.LIGHT -> false; ThemeMode.SYSTEM -> isSystemInDarkTheme() }
+    val colors = if (dark) darkColorScheme(
+        primary = Color(0xFF5EEAD4), secondary = Color(0xFFFBBF24), background = Color(0xFF071F20),
+        surface = Color(0xFF0C292A), surfaceContainer = Color(0xFF123536)
+    ) else lightColorScheme(
+        primary = Color(0xFF0F766E), secondary = Color(0xFFF59E0B), surface = Color(0xFFFAFAF8),
+        surfaceContainer = Color.White, background = Color(0xFFF4F7F6)
+    )
+    MaterialTheme(colorScheme = colors, content = content)
+}
 
 @Composable private fun PrestaPayApp(vm: MainViewModel) {
     val state = vm.state
@@ -68,7 +83,7 @@ class MainActivity : ComponentActivity() {
     val context = LocalContext.current; val scope = rememberCoroutineScope(); val credentialManager = remember { CredentialManager.create(context) }
     fun signInGoogle() { scope.launch { googleError = null; runCatching { val option = GetGoogleIdOption.Builder().setFilterByAuthorizedAccounts(false).setServerClientId(BuildConfig.FIREBASE_WEB_CLIENT_ID).setAutoSelectEnabled(false).build(); val request = GetCredentialRequest.Builder().addCredentialOption(option).build(); val credential = credentialManager.getCredential(context, request).credential; require(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) { "Respuesta de Google no válida" }; GoogleIdTokenCredential.createFrom(credential.data).idToken }.onSuccess(googleLogin).onFailure { googleError = it.message ?: "No se pudo acceder con Google" } } }
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF083344), Color(0xFF0F766E)))).padding(22.dp), contentAlignment = Alignment.Center) {
-        ElevatedCard(Modifier.fillMaxWidth().widthIn(max = 520.dp), colors = CardDefaults.elevatedCardColors(containerColor = Color.White)) { Column(Modifier.padding(28.dp)) {
+        ElevatedCard(Modifier.fillMaxWidth().widthIn(max = 520.dp)) { Column(Modifier.padding(28.dp)) {
             Surface(shape = MaterialTheme.shapes.extraLarge, color = Color(0xFFFFF7D6), modifier = Modifier.size(64.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Paid, null, Modifier.size(38.dp), tint = Color(0xFF0F766E)) } }
             Spacer(Modifier.height(18.dp)); Text("PrestaPay", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black); Text("Tu operación financiera, clara y bajo control.", color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(26.dp))
             OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Correo") }, leadingIcon = { Icon(Icons.Default.Email, null) }, singleLine = true); Spacer(Modifier.height(10.dp))
@@ -97,7 +112,7 @@ private data class Destination(val label: String, val icon: androidx.compose.ui.
 @Composable private fun MainShell(vm: MainViewModel) {
     val destinations = listOf(Destination("Inicio", Icons.Default.Home), Destination("Clientes", Icons.Default.People), Destination("Préstamos", Icons.Default.AccountBalance), Destination("Inventario", Icons.Default.Inventory2), Destination("Caja", Icons.Default.Receipt), Destination("Cobros", Icons.Default.Notifications), Destination("Reportes", Icons.Default.Assessment), Destination("Imprimir", Icons.Default.Print))
     var selected by remember { mutableIntStateOf(0) }; val state = vm.state; val active = state.tenant?.subscription?.accessAllowed == true; val permissions = state.membership?.permissions ?: Permissions()
-    Scaffold(topBar = { TopAppBar(title = { Text(state.tenant?.branding?.businessName ?: "PrestaPay") }, actions = { IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "Actualizar") }; IconButton(vm::logout) { Icon(Icons.AutoMirrored.Filled.Logout, "Salir") } }) },
+    Scaffold(topBar = { TopAppBar(title = { Column { Text(state.tenant?.branding?.businessName ?: "PrestaPay"); if (state.usingOfflineCache) Text("Modo sin conexión", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary) } }, actions = { if (state.usingOfflineCache) Icon(Icons.Default.CloudOff, "Datos guardados sin conexión", tint = MaterialTheme.colorScheme.secondary); IconButton(vm::cycleTheme) { Icon(when (state.themeMode) { ThemeMode.DARK -> Icons.Default.DarkMode; ThemeMode.LIGHT -> Icons.Default.LightMode; ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto }, "Cambiar tema") }; IconButton(vm::refresh) { Icon(Icons.Default.Refresh, "Actualizar") }; IconButton(vm::logout) { Icon(Icons.AutoMirrored.Filled.Logout, "Salir") } }) },
         bottomBar = { NavigationBar { destinations.forEachIndexed { index, d -> NavigationBarItem(selected = selected == index, onClick = { selected = index }, icon = { Icon(d.icon, null) }, label = { Text(d.label, maxLines = 1) }) } } }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (selected) {
@@ -135,7 +150,7 @@ private fun dominicanDate(value: String?): LocalDate? = runCatching { Instant.pa
     }
 }
 
-@Composable private fun CollectionCard(loan: Loan, clients: List<Client>, late: Boolean) { val client = clients.find { it.id == loan.clientId }; ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = if (late) MaterialTheme.colorScheme.errorContainer else Color(0xFFFFF7D6))) { Column(Modifier.padding(16.dp)) { Text(loan.clientName ?: client?.name ?: loan.clientId, fontWeight = FontWeight.Bold); Text(client?.phone.orEmpty()); Text(if (late) "ATRASADO" else "COBRAR HOY", color = if (late) MaterialTheme.colorScheme.error else Color(0xFF92400E), fontWeight = FontWeight.Black); Text("Cuota DOP ${loan.installmentAmount ?: 0.0}") } } }
+@Composable private fun CollectionCard(loan: Loan, clients: List<Client>, late: Boolean) { val client = clients.find { it.id == loan.clientId }; ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = if (late) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer)) { Column(Modifier.padding(16.dp)) { Text(loan.clientName ?: client?.name ?: loan.clientId, fontWeight = FontWeight.Bold); Text(client?.phone.orEmpty()); Text(if (late) "ATRASADO" else "COBRAR HOY", color = if (late) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Black); Text("Cuota DOP ${loan.installmentAmount ?: 0.0}") } } }
 
 @Composable private fun ReportsScreen(loans: List<Loan>, clients: List<Client>) {
     val today = LocalDate.now(ZoneId.of("America/Santo_Domingo")); var from by remember { mutableStateOf(today.withDayOfMonth(1).toString()) }; var to by remember { mutableStateOf(today.toString()) }

@@ -5,7 +5,7 @@
 - Firebase Authentication emite la identidad. Los roles de empresa nunca se deducen del correo; la única excepción global es el correo verificado del Super Admin principal configurado explícitamente.
 - Cada registro operativo vive bajo `tenants/{tenantId}/...` y conserva `tenantId` como defensa adicional.
 - Las reglas de Firestore validan membresía, rol y `subscription.accessUntil` en cada escritura.
-- El API repite esas validaciones con Firebase Admin. Android consume el API; la web puede usar Firestore en tiempo real para operaciones autorizadas.
+- El API repite esas validaciones con Firebase Admin. Web y Android usan Firestore en tiempo real para lecturas y escrituras autorizadas con soporte offline; las operaciones atómicas sensibles, como caja/recibos y altas por correo, permanecen en el API.
 - El correo verificado `martin.tavarez.gomez@gmail.com` y las identidades con el custom claim `superAdmin: true`, asignado fuera del cliente, pueden administrar todas las empresas y suscripciones.
 
 ## Colecciones

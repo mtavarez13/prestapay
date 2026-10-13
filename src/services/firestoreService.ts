@@ -68,6 +68,12 @@ export const firestoreService = {
       return snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as TenantMembership));
     } catch (error) { return fail(error, OperationType.LIST, path); }
   },
+  subscribeToTenantMembers(tenantId: string, callback: (data: TenantMembership[]) => void, onError: () => void) {
+    const path = `tenants/${tenantId}/members`;
+    return onSnapshot(collection(db, path),
+      (snapshot) => callback(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as TenantMembership))),
+      (error: FirestoreError) => { console.error('Firestore members subscription failed', error); onError(); });
+  },
   async createTenant(tenant: Tenant, membership: TenantMembership): Promise<void> {
     const user = auth.currentUser;
     if (!user || user.uid !== tenant.ownerId || membership.userId !== user.uid) throw new Error('Alta de empresa no autorizada.');
