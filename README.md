@@ -2,6 +2,8 @@
 
 PrestaPay es una plataforma SaaS multiempresa para casas de empeño y negocios de préstamos. El repositorio contiene:
 
+Proyecto Firebase configurado: `prestamo-27ccb` (número `1098192394227`).
+
 - `src/`: panel web React con datos por empresa, roles, suscripción, branding e impresión 58/80 mm.
 - `backend/`: API TypeScript/Express autenticada con Firebase, validación de tenant, rol y suscripción.
 - `android/`: aplicación Android nativa Kotlin + Jetpack Compose, Retrofit y ESC/POS Bluetooth.
@@ -16,7 +18,7 @@ PrestaPay es una plataforma SaaS multiempresa para casas de empeño y negocios d
 
 ## Configuración local
 
-1. Copie `.env.example` a `.env.local` y complete las variables `VITE_*`.
+1. La configuración local de `PrestaPay Web` está en `.env.local` (ignorada por Git). Para otro entorno, copie `.env.example` y reemplace las variables `VITE_*`.
 2. Para el API, exporte `GOOGLE_APPLICATION_CREDENTIALS`, `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID` y `CORS_ORIGINS` en el entorno del servidor. No exponga `GEMINI_API_KEY` en Vite.
 3. Instale y verifique:
 
@@ -34,7 +36,7 @@ npm --workspace backend run dev
 
 ## Android
 
-Abra `android/` en Android Studio. Configure estas propiedades en `~/.gradle/gradle.properties` o como variables de entorno; no las confirme al repositorio:
+Abra `android/` en Android Studio. La configuración local está en `android/firebase.properties` (ignorada por Git). Para otro entorno, configure estas propiedades allí, en Gradle o como variables de entorno:
 
 ```properties
 PRESTAPAY_API_URL=https://api.example.com/

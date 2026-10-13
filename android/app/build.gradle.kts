@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,7 +7,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-fun env(name: String, fallback: String = "") = providers.gradleProperty(name).orElse(System.getenv(name) ?: fallback).get()
+val localFirebase = Properties().apply {
+    val file = rootProject.file("firebase.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+fun env(name: String, fallback: String = "") = providers.gradleProperty(name)
+    .orElse(System.getenv(name) ?: localFirebase.getProperty(name) ?: fallback).get()
 
 android {
     namespace = "com.prestapay.mobile"
@@ -19,7 +26,7 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"${env("PRESTAPAY_API_URL", "http://10.0.2.2:8080/")}\"")
         buildConfigField("String", "FIREBASE_API_KEY", "\"${env("PRESTAPAY_FIREBASE_API_KEY")}\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"${env("PRESTAPAY_FIREBASE_APP_ID")}\"")
-        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${env("PRESTAPAY_FIREBASE_PROJECT_ID", "prestapay-local")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${env("PRESTAPAY_FIREBASE_PROJECT_ID", "prestamo-27ccb")}\"")
     }
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }

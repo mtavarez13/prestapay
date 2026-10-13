@@ -7,6 +7,7 @@ backend/dist/
 *.log
 android/.gradle/
 android/local.properties
+android/firebase.properties
 android/**/build/
 *.jks
 *.keystore
