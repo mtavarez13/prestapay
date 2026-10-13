@@ -111,6 +111,7 @@ export interface Article extends TenantEntity {
 
 export type LoanType = 'prenda' | 'sin_garantia' | 'hipotecario';
 export type LoanStatus = 'activo' | 'atrasado' | 'vencido' | 'pagado';
+export type PaymentFrequency = 'diaria' | 'semanal' | 'quincenal' | 'mensual';
 export interface Loan extends TenantEntity {
   clientId: string;
   clientName?: string;
@@ -118,6 +119,7 @@ export interface Loan extends TenantEntity {
   capital: number;
   rate: number;
   installments: number;
+  paymentFrequency?: PaymentFrequency;
   balance: number;
   status: LoanStatus;
   dueDate: string;
