@@ -20,7 +20,7 @@ import kotlinx.serialization.json.JsonElement
 @Serializable data class CreateResult(val id: String, val receiptId: String? = null)
 @Serializable data class TenantCreate(val businessName: String, val legalName: String? = null, val taxId: String? = null, val phone: String? = null, val address: String? = null)
 @Serializable data class TenantCreateResponse(val tenant: TenantInfo, val membership: Membership)
-@Serializable data class BrandingInfo(val businessName: String = "PrestaPay", val taxId: String = "", val address: String = "", val phone: String = "", val currency: String = "DOP")
+@Serializable data class BrandingInfo(val businessName: String = "PrestaPay", val legalName: String = "", val taxId: String = "", val address: String = "", val phone: String = "", val email: String = "", val currency: String = "DOP")
 @Serializable data class PrinterInfo(val paperWidth: Int = 80, val marginMm: Int = 3, val copies: Int = 1, val footer: String = "Gracias por su pago")
 @Serializable data class SubscriptionInfo(val status: String = "", val currentPeriodEnd: String = "", val accessAllowed: Boolean = false)
 @Serializable data class TenantInfo(val id: String, val branding: BrandingInfo = BrandingInfo(), val printer: PrinterInfo = PrinterInfo(), val subscription: SubscriptionInfo = SubscriptionInfo())

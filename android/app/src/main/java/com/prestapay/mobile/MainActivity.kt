@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.prestapay.mobile.data.*
 import com.prestapay.mobile.printing.PairedPrinter
+import com.prestapay.mobile.printing.LoanContractPdf
 import com.prestapay.mobile.printing.ThermalPrinter
 import com.prestapay.mobile.ui.MainViewModel
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -102,7 +103,7 @@ private data class Destination(val label: String, val icon: androidx.compose.ui.
             when (selected) {
                 0 -> Dashboard(vm)
                 1 -> ClientScreen(state.clients, active && permissions.manageClients, vm::createClient)
-                2 -> LoanScreen(state.loans, state.clients, active && permissions.manageLoans, vm::createLoan)
+                2 -> LoanScreen(state.loans, state.clients, state.tenant, active && permissions.manageLoans, vm::createLoan)
                 3 -> ArticleScreen(state.articles, state.clients, state.loans, active && permissions.manageInventory, vm::createArticle)
                 4 -> CashScreen(state.transactions, state.loans, active && permissions.manageCash, vm::createTransaction)
                 5 -> NotificationsScreen(state.loans, state.clients)
@@ -151,8 +152,8 @@ private fun dominicanDate(value: String?): LocalDate? = runCatching { Instant.pa
 
 @Composable private fun ClientDialog(close: () -> Unit, submit: (ClientCreate) -> Unit) { var name by remember { mutableStateOf("") }; var phone by remember { mutableStateOf("") }; var address by remember { mutableStateOf("") }; FormDialog("Nuevo cliente", close, name.length >= 2, { submit(ClientCreate(name, phone, address)) }) { OutlinedTextField(name, { name = it }, label = { Text("Nombre") }); OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") }); OutlinedTextField(address, { address = it }, label = { Text("Dirección") }) } }
 
-@Composable private fun LoanScreen(values: List<Loan>, clients: List<Client>, canWrite: Boolean, create: (LoanCreate) -> Unit) {
-    var dialog by remember { mutableStateOf(false) }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Préstamos", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay préstamos registrados.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(it.clientName ?: it.clientId, fontWeight = FontWeight.Bold); Text("${it.type} · ${it.status}"); Text("${it.installments} cuotas · Frecuencia ${it.paymentFrequency}", color = MaterialTheme.colorScheme.primary); Text("Balance DOP ${it.balance}") } } } }; if (dialog) LoanDialog(clients, { dialog = false }) { create(it); dialog = false }
+@Composable private fun LoanScreen(values: List<Loan>, clients: List<Client>, tenant: TenantInfo?, canWrite: Boolean, create: (LoanCreate) -> Unit) {
+    val context = LocalContext.current; var dialog by remember { mutableStateOf(false) }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Préstamos", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay préstamos registrados.") }; items(values) { loan -> ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text(loan.clientName ?: loan.clientId, fontWeight = FontWeight.Bold); Text("${loan.type} · ${loan.status}"); Text("${loan.installments} cuotas · Frecuencia ${loan.paymentFrequency}", color = MaterialTheme.colorScheme.primary); Text("Balance DOP ${loan.balance}"); val client = clients.find { it.id == loan.clientId }; if (tenant != null && client != null) TextButton({ LoanContractPdf.share(context, tenant, client, loan) }) { Icon(Icons.Default.PictureAsPdf, null); Spacer(Modifier.width(6.dp)); Text("Contrato PDF") } } } } }; if (dialog) LoanDialog(clients, { dialog = false }) { create(it); dialog = false }
 }
 
 @Composable private fun LoanDialog(clients: List<Client>, close: () -> Unit, submit: (LoanCreate) -> Unit) {
