@@ -120,6 +120,11 @@ export interface Loan extends TenantEntity {
   rate: number;
   installments: number;
   paymentFrequency?: PaymentFrequency;
+  installmentAmount?: number;
+  interestAmount?: number;
+  totalPayable?: number;
+  nextPaymentDate?: string;
+  contractNumber?: string;
   balance: number;
   status: LoanStatus;
   dueDate: string;

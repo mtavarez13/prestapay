@@ -5,6 +5,7 @@ PrestaPay es una plataforma SaaS multiempresa para casas de empeño y negocios d
 Proyecto Firebase configurado: `prestamo-27ccb` (número `1098192394227`).
 
 - `src/`: panel web React con datos por empresa, roles, suscripción, branding e impresión 58/80 mm.
+- Contratos de préstamo PDF para revisión y legalización notarial, recordatorios de cobro, reportes por fechas y métricas de cartera.
 - `backend/`: API TypeScript/Express autenticada con Firebase, validación de tenant, rol y suscripción.
 - `android/`: aplicación Android nativa Kotlin + Jetpack Compose, Retrofit y ESC/POS Bluetooth.
 - `firestore.rules` y `storage.rules`: aislamiento multi-tenant y permisos.
@@ -60,6 +61,7 @@ El APK de desarrollo se genera en `android/app/build/outputs/apk/debug/app-debug
 - Conecte un proveedor de pagos mediante webhooks firmados para automatizar estados. El endpoint manual de Super Admin sirve para administración controlada, no sustituye un webhook.
 - Consulte [arquitectura](docs/ARCHITECTURE.md), [auditoría](docs/AUDIT.md) y [migración](data/migrations/README.md).
 - Consulte también el [contrato resumido del API](docs/API.md).
+- Consulte las [consideraciones legales del contrato](docs/LEGAL_CONTRACTS.md) antes de usarlo en producción.
 - Para publicar la interfaz estática consulte la [guía de Hostinger](docs/HOSTINGER.md).
 
 No se incluye despliegue ni credenciales de producción.

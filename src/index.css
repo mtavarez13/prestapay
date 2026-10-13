@@ -31,3 +31,9 @@ input:focus, select:focus { outline: 3px solid rgb(20 184 166 / 18%); border-col
   .page-enter { animation: page-enter 320ms ease-out both; }
   @keyframes page-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 }
+
+@media print {
+  .app-sidebar, .no-print { display: none !important; }
+  .app-main { padding-left: 0 !important; }
+  body { background: white; }
+}

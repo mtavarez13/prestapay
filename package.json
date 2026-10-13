@@ -21,11 +21,13 @@
     "test": "npm --workspace backend test",
     "test:rules": "node --test test/firestore.rules.test.mjs",
     "test:rules:emulator": "npx firebase-tools emulators:exec --only firestore \"npm run test:rules\"",
+    "generate:contract-sample": "tsx scripts/generate-contract-sample.ts",
     "build:api": "npm --workspace backend run build",
     "build:all": "npm run lint && npm run build && npm test"
   },
   "dependencies": {
     "firebase": "^12.19.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.52.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

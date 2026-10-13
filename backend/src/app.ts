@@ -10,6 +10,7 @@ import { authenticate, isSuperAdmin, requireActiveSubscription, requireRole, req
 import { articleSchema, clientSchema, loanSchema, membershipSchema, subscriptionSchema, tenantCreateSchema, transactionSchema } from './schemas.js';
 import { hasSubscriptionAccess } from './subscription.js';
 import { calculatePaymentBalance } from './payments.js';
+import { addPaymentPeriod, asDate, isPastDue, type PaymentFrequency } from './loans.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -51,7 +52,9 @@ app.get('/v1/summary', requireTenant, async (req, res) => {
   const root = adminDb.collection(`tenants/${req.tenant!.id}`);
   const [clients, loans, articles] = await Promise.all([root.doc('meta').get().catch(() => null), adminDb.collection(`${root.path}/loans`).where('status', 'in', ['activo','atrasado','vencido']).get(), adminDb.collection(`${root.path}/articles`).where('state', '==', 'en_resguardo').get()]);
   const clientCount = clients?.get('clientCount') ?? (await adminDb.collection(`${root.path}/clients`).count().get()).data().count;
-  res.json({ clients: clientCount, activeLoans: loans.size, heldArticles: articles.size, outstandingBalance: loans.docs.reduce((sum, x) => sum + Number(x.get('balance') || 0), 0) });
+  const overdueLoans = loans.docs.filter(x => ['atrasado','vencido'].includes(String(x.get('status'))) || isPastDue(x.get('nextPaymentDate') || x.get('dueDate'))).length;
+  const activeClientIds = new Set(loans.docs.map(x => String(x.get('clientId'))).filter(Boolean));
+  res.json({ clients: clientCount, activeClients: activeClientIds.size, activeLoans: loans.size, onTimeLoans: loans.size - overdueLoans, overdueLoans, capitalInvested: loans.docs.reduce((sum, x) => sum + Number(x.get('capital') || 0), 0), heldArticles: articles.size, outstandingBalance: loans.docs.reduce((sum, x) => sum + Number(x.get('balance') || 0), 0) });
 });
 
 type Resource = 'clients' | 'articles' | 'loans';
@@ -65,7 +68,9 @@ for (const resource of Object.keys(schemas) as Resource[]) {
   });
   app.post(`/v1/${resource}`, requireTenant, requireActiveSubscription, requireRole(...writeRoles[resource]), async (req, res) => {
     const data = schemas[resource].parse(req.body) as Record<string, unknown>; const tenantId = req.tenant!.id; const now = FieldValue.serverTimestamp();
-    const record = await adminDb.collection(`tenants/${tenantId}/${resource}`).add({ ...data, tenantId, createdAt: now, updatedAt: now, createdBy: req.identity!.uid });
+    const record = adminDb.collection(`tenants/${tenantId}/${resource}`).doc();
+    const generated = resource === 'loans' && !data.contractNumber ? { contractNumber: `PRE-${record.id.slice(0,8).toUpperCase()}` } : {};
+    await record.create({ ...data, ...generated, tenantId, createdAt: now, updatedAt: now, createdBy: req.identity!.uid });
     await adminDb.collection(`tenants/${tenantId}/auditLogs`).add({ tenantId, action: `${resource}.create`, entityId: record.id, actorId: req.identity!.uid, createdAt: now });
     res.status(201).json({ id: record.id });
   });
@@ -82,7 +87,11 @@ app.post('/v1/transactions', requireTenant, requireActiveSubscription, requireRo
     if (value.contractId && value.type === 'ingreso') {
       const loanRef = adminDb.doc(`tenants/${tenantId}/loans/${value.contractId}`); const loan = await transaction.get(loanRef);
       if (!loan.exists) throw Object.assign(new Error('loan_not_found'), { statusCode: 404 });
-      previousBalance = Number(loan.get('balance') || 0); newBalance = calculatePaymentBalance(previousBalance, value.amount); transaction.update(loanRef, { balance: newBalance, status: newBalance === 0 ? 'pagado' : loan.get('status'), updatedAt: FieldValue.serverTimestamp(), updatedBy: req.identity!.uid });
+      previousBalance = Number(loan.get('balance') || 0); newBalance = calculatePaymentBalance(previousBalance, value.amount);
+      const installmentAmount = Number(loan.get('installmentAmount') || 0); const currentPaymentDate = asDate(loan.get('nextPaymentDate'));
+      const paymentFrequency = String(loan.get('paymentFrequency') || 'mensual') as PaymentFrequency;
+      const nextPaymentDate = newBalance > 0 && installmentAmount > 0 && value.amount >= installmentAmount && currentPaymentDate ? addPaymentPeriod(currentPaymentDate, paymentFrequency).toISOString() : loan.get('nextPaymentDate');
+      transaction.update(loanRef, { balance: newBalance, status: newBalance === 0 ? 'pagado' : 'activo', nextPaymentDate, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.identity!.uid });
     }
     transaction.create(transactionRef, { ...value, tenantId, previousBalance, newBalance, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
     transaction.create(receiptRef, { tenantId, transactionId: transactionRef.id, number: `REC-${Date.now().toString(36).toUpperCase()}`, amount: value.amount, description: value.description, contractId: value.contractId ?? null, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
