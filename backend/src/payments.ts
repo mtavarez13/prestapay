@@ -4,3 +4,8 @@ export function calculatePaymentBalance(previousBalance: number, amount: number)
   if (amount > previousBalance) throw Object.assign(new Error('payment_exceeds_balance'), { statusCode: 409 });
   return Math.max(0, previousBalance - amount);
 }
+
+export function coveredInstallments(amount: number, installmentAmount: number): number {
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(installmentAmount) || installmentAmount <= 0) return 0;
+  return Math.floor((amount + 0.005) / installmentAmount);
+}

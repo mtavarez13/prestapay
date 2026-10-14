@@ -13,7 +13,7 @@ Todas las rutas bajo `/v1` requieren `Authorization: Bearer <Firebase ID token>`
 - `GET|POST /v1/clients`, `/v1/loans` y `/v1/articles`.
 - Los préstamos incluyen `paymentFrequency` (`diaria`, `semanal`, `quincenal` o `mensual`) e `installments` como cantidad de cuotas.
 - `PATCH /v1/clients/:id`, `/v1/loans/:id` y `/v1/articles/:id`.
-- `GET|POST /v1/transactions`: los abonos actualizan préstamo, caja y recibo en una sola transacción; no permite sobrepagos.
+- `GET|POST /v1/transactions`: los abonos por una cuota, varias cuotas o monto libre actualizan préstamo, próxima fecha de cobro, caja y recibo en una sola transacción; no permite sobrepagos.
 - `GET /v1/summary`: capital invertido, préstamos al día/atrasados, clientes activos y métricas de la empresa.
 
 ## Administración

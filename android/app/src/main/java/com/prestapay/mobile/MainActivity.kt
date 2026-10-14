@@ -187,9 +187,97 @@ private fun dominicanDate(value: String?): LocalDate? = runCatching { Instant.pa
 
 @Composable private fun ArticleDialog(clients: List<Client>, loans: List<Loan>, close: () -> Unit, submit: (ArticleCreate) -> Unit) { var name by remember { mutableStateOf("") }; var category by remember { mutableStateOf("") }; var brand by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var loanId by remember { mutableStateOf("") }; FormDialog("Nuevo artículo", close, name.length >= 2 && category.isNotBlank(), { val loan = loans.find { it.id == loanId }; submit(ArticleCreate(name, category, brand, description = description, contractId = loan?.id, clientId = loan?.clientId)) }) { OutlinedTextField(name, { name = it }, label = { Text("Artículo") }); OutlinedTextField(category, { category = it }, label = { Text("Categoría") }); OutlinedTextField(brand, { brand = it }, label = { Text("Marca") }); OutlinedTextField(loanId, { loanId = it }, label = { Text("ID préstamo opcional") }); OutlinedTextField(description, { description = it }, label = { Text("Descripción") }) } }
 
-@Composable private fun CashScreen(values: List<CashTransaction>, loans: List<Loan>, tenant: TenantInfo?, canWrite: Boolean, create: (TransactionCreate, (CreateResult) -> Unit) -> Unit) { val context = LocalContext.current; var dialog by remember { mutableStateOf(false) }; val balance = values.sumOf { if (it.type == "ingreso") it.amount else -it.amount }; LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { item { ScreenHeader("Caja · DOP $balance", canWrite) { dialog = true } }; if (values.isEmpty()) item { Text("No hay movimientos.") }; items(values) { ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.description ?: it.type); Text("${if (it.type == "ingreso") "+" else "-"}${it.amount}", fontWeight = FontWeight.Bold) } } } }; if (dialog) TransactionDialog(loans, { dialog = false }) { payment -> val loan = loans.find { it.id == payment.contractId }; create(payment) { result -> tenant?.let { ThermalReceiptPdf.share(context, it, loan, payment, result) }; dialog = false } } }
+@Composable private fun CashScreen(values: List<CashTransaction>, loans: List<Loan>, tenant: TenantInfo?, canWrite: Boolean, create: (TransactionCreate, (CreateResult) -> Unit) -> Unit) {
+    val context = LocalContext.current
+    var search by remember { mutableStateOf("") }
+    var selectedLoan by remember { mutableStateOf<Loan?>(null) }
+    var generalDialog by remember { mutableStateOf(false) }
+    val balance = values.sumOf { if (it.type == "ingreso") it.amount else -it.amount }
+    val activeLoans = loans.filter { it.status != "pagado" && it.balance > 0 }
+    val filteredLoans = activeLoans.filter { search.isBlank() || "${it.clientName.orEmpty()} ${it.contractNumber.orEmpty()} ${it.id}".contains(search.trim(), ignoreCase = true) }
 
-@Composable private fun TransactionDialog(loans: List<Loan>, close: () -> Unit, submit: (TransactionCreate) -> Unit) { var amount by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var type by remember { mutableStateOf("ingreso") }; var loanId by remember { mutableStateOf("") }; FormDialog("Movimiento de caja", close, amount.toDoubleOrNull()?.let { it > 0 } == true && description.isNotBlank(), { submit(TransactionCreate(loanId.ifBlank { null }, type, amount.toDouble(), description)) }) { OutlinedTextField(amount, { amount = it }, label = { Text("Monto") }); OutlinedTextField(description, { description = it }, label = { Text("Descripción") }); OutlinedTextField(type, { type = it }, label = { Text("ingreso o egreso") }); OutlinedTextField(loanId, { loanId = it }, label = { Text("ID préstamo si es abono") }); if (loans.isNotEmpty()) Text("Préstamos: ${loans.joinToString { "${it.id.take(6)} ${it.clientName.orEmpty()}" }}", style = MaterialTheme.typography.bodySmall) } }
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column { Text("Caja", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black); Text("Balance DOP $balance") }
+                FilledIconButton({ generalDialog = true }, enabled = canWrite) { Icon(Icons.Default.Add, "Movimiento general") }
+            }
+        }
+        item { OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth(), label = { Text("Buscar cliente o contrato") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true) }
+        item { Text("Préstamos activos (${activeLoans.size})", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (filteredLoans.isEmpty()) item { Text(if (search.isBlank()) "No hay préstamos activos." else "No se encontraron préstamos.") }
+        items(filteredLoans, key = { it.id }) { loan ->
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(loan.clientName ?: "Cliente", fontWeight = FontWeight.Bold); Text(loan.contractNumber ?: loan.id.take(8), style = MaterialTheme.typography.bodySmall) }
+                        Button({ selectedLoan = loan }, enabled = canWrite) { Text("Pagar") }
+                    }
+                    Text("Saldo DOP ${loan.balance}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("Cuota DOP ${loanInstallmentAmount(loan)} · ${loan.paymentFrequency.replaceFirstChar { it.uppercase() }}", style = MaterialTheme.typography.bodySmall)
+                    dominicanDate(loan.nextPaymentDate ?: loan.dueDate)?.let { Text("Próximo cobro $it", style = MaterialTheme.typography.bodySmall) }
+                }
+            }
+        }
+        item { Text("Movimientos recientes", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
+        if (values.isEmpty()) item { Text("No hay movimientos.") }
+        items(values, key = { it.id }) { movement -> ElevatedCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(movement.description ?: movement.type); Text("${if (movement.type == "ingreso") "+" else "-"}DOP ${movement.amount}", fontWeight = FontWeight.Bold) } } }
+    }
+    selectedLoan?.let { loan ->
+        LoanPaymentDialog(loan, { selectedLoan = null }) { payment ->
+            create(payment) { result -> tenant?.let { ThermalReceiptPdf.share(context, it, loan, payment, result) }; selectedLoan = null }
+        }
+    }
+    if (generalDialog) GeneralTransactionDialog({ generalDialog = false }) { movement ->
+        create(movement) { result -> if (movement.type == "ingreso") tenant?.let { ThermalReceiptPdf.share(context, it, null, movement, result) }; generalDialog = false }
+    }
+}
+
+private fun loanInstallmentAmount(loan: Loan): Double = loan.installmentAmount ?: ((loan.capital + loan.capital * loan.rate / 100.0) / loan.installments.coerceAtLeast(1))
+
+@Composable private fun LoanPaymentDialog(loan: Loan, close: () -> Unit, submit: (TransactionCreate) -> Unit) {
+    var mode by remember { mutableStateOf("installment") }
+    var countText by remember { mutableStateOf("2") }
+    var customText by remember { mutableStateOf("") }
+    val installment = loanInstallmentAmount(loan)
+    val count = countText.toIntOrNull()?.coerceAtLeast(1) ?: 1
+    val amount = when (mode) { "custom" -> customText.toDoubleOrNull() ?: 0.0; "multiple" -> minOf(loan.balance, installment * count); else -> minOf(loan.balance, installment) }
+    val valid = amount > 0 && amount <= loan.balance && (mode != "multiple" || count >= 2)
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text("Pago · ${loan.clientName ?: "Cliente"}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Saldo DOP ${loan.balance}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                Text("Cuota DOP $installment")
+                listOf("installment" to "Una cuota", "multiple" to "Varias cuotas", "custom" to "Otro monto").forEach { (value, label) ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == value, { mode = value }); Text(label) }
+                }
+                if (mode == "multiple") OutlinedTextField(countText, { countText = it }, Modifier.fillMaxWidth(), label = { Text("Cantidad de cuotas") }, singleLine = true)
+                if (mode == "custom") OutlinedTextField(customText, { customText = it }, Modifier.fillMaxWidth(), label = { Text("Monto a pagar") }, singleLine = true)
+                Text("Total DOP $amount", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (amount > loan.balance) Text("El pago no puede superar el saldo.", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            Button({
+                val paidCount = when (mode) { "installment" -> 1; "multiple" -> count; else -> null }
+                val description = if (mode == "custom") "Abono libre al préstamo" else "Pago de $paidCount ${if (paidCount == 1) "cuota" else "cuotas"}"
+                submit(TransactionCreate(loan.id, "ingreso", amount, description, mode, paidCount))
+            }, enabled = valid) { Text("Registrar y crear recibo") }
+        },
+        dismissButton = { TextButton(close) { Text("Cancelar") } }
+    )
+}
+
+@Composable private fun GeneralTransactionDialog(close: () -> Unit, submit: (TransactionCreate) -> Unit) {
+    var amount by remember { mutableStateOf("") }; var description by remember { mutableStateOf("") }; var type by remember { mutableStateOf("ingreso") }
+    FormDialog("Movimiento general", close, amount.toDoubleOrNull()?.let { it > 0 } == true && description.isNotBlank(), { submit(TransactionCreate(type = type, amount = amount.toDouble(), description = description)) }) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { RadioButton(type == "ingreso", { type = "ingreso" }); Text("Ingreso"); Spacer(Modifier.width(12.dp)); RadioButton(type == "egreso", { type = "egreso" }); Text("Egreso") }
+        OutlinedTextField(amount, { amount = it }, Modifier.fillMaxWidth(), label = { Text("Monto") })
+        OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("Descripción") })
+    }
+}
 
 @Composable private fun FormDialog(title: String, close: () -> Unit, valid: Boolean, submit: () -> Unit, fields: @Composable ColumnScope.() -> Unit) { AlertDialog(onDismissRequest = close, title = { Text(title) }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = fields) }, confirmButton = { Button(submit, enabled = valid) { Text("Guardar") } }, dismissButton = { TextButton(close) { Text("Cancelar") } }) }
 

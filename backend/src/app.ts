@@ -9,8 +9,8 @@ import { adminAuth, adminDb } from './firebase.js';
 import { authenticate, isSuperAdmin, requireActiveSubscription, requireRole, requireSuperAdmin, requireTenant } from './middleware.js';
 import { articleSchema, clientSchema, loanSchema, membershipSchema, subscriptionSchema, tenantCreateSchema, transactionSchema } from './schemas.js';
 import { hasSubscriptionAccess } from './subscription.js';
-import { calculatePaymentBalance } from './payments.js';
-import { addPaymentPeriod, asDate, isPastDue, type PaymentFrequency } from './loans.js';
+import { calculatePaymentBalance, coveredInstallments } from './payments.js';
+import { addPaymentPeriods, asDate, isPastDue, type PaymentFrequency } from './loans.js';
 
 export const app = express();
 function jsonValue(value: unknown): unknown {
@@ -89,7 +89,7 @@ app.get('/v1/transactions', requireTenant, async (req, res) => {
 app.post('/v1/transactions', requireTenant, requireActiveSubscription, requireRole('owner','admin','cashier'), async (req, res) => {
   const value = transactionSchema.parse(req.body); const tenantId = req.tenant!.id; const transactionRef = adminDb.collection(`tenants/${tenantId}/transactions`).doc(); const receiptRef = adminDb.collection(`tenants/${tenantId}/receipts`).doc();
   const receiptNumber = `REC-${Date.now().toString(36).toUpperCase()}`;
-  let previousBalance = 0; let newBalance = 0;
+  let previousBalance = 0; let newBalance = 0; let installmentsCovered = 0;
   await adminDb.runTransaction(async transaction => {
     if (value.contractId && value.type === 'ingreso') {
       const loanRef = adminDb.doc(`tenants/${tenantId}/loans/${value.contractId}`); const loan = await transaction.get(loanRef);
@@ -97,13 +97,15 @@ app.post('/v1/transactions', requireTenant, requireActiveSubscription, requireRo
       previousBalance = Number(loan.get('balance') || 0); newBalance = calculatePaymentBalance(previousBalance, value.amount);
       const installmentAmount = Number(loan.get('installmentAmount') || 0); const currentPaymentDate = asDate(loan.get('nextPaymentDate'));
       const paymentFrequency = String(loan.get('paymentFrequency') || 'mensual') as PaymentFrequency;
-      const nextPaymentDate = newBalance > 0 && installmentAmount > 0 && value.amount >= installmentAmount && currentPaymentDate ? addPaymentPeriod(currentPaymentDate, paymentFrequency).toISOString() : loan.get('nextPaymentDate');
+      if (value.paymentMode !== 'custom') { const expected = Math.min(previousBalance, installmentAmount * (value.installmentCount ?? 1)); if (installmentAmount <= 0 || Math.abs(expected - value.amount) > 0.01) throw Object.assign(new Error('invalid_installment_payment'), { statusCode: 422 }); }
+      installmentsCovered = coveredInstallments(value.amount, installmentAmount);
+      const nextPaymentDate = newBalance > 0 && installmentsCovered > 0 && currentPaymentDate ? addPaymentPeriods(currentPaymentDate, paymentFrequency, installmentsCovered).toISOString() : loan.get('nextPaymentDate');
       transaction.update(loanRef, { balance: newBalance, status: newBalance === 0 ? 'pagado' : 'activo', nextPaymentDate, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.identity!.uid });
     }
     transaction.create(transactionRef, { ...value, tenantId, previousBalance, newBalance, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
-    transaction.create(receiptRef, { tenantId, transactionId: transactionRef.id, number: receiptNumber, amount: value.amount, description: value.description, contractId: value.contractId ?? null, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
+    transaction.create(receiptRef, { tenantId, transactionId: transactionRef.id, number: receiptNumber, amount: value.amount, description: value.description, contractId: value.contractId ?? null, paymentMode: value.paymentMode, installmentCount: value.installmentCount ?? null, installmentsCovered, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
   });
-  res.status(201).json({ id: transactionRef.id, receiptId: receiptRef.id, receiptNumber, previousBalance, newBalance });
+  res.status(201).json({ id: transactionRef.id, receiptId: receiptRef.id, receiptNumber, previousBalance, newBalance, installmentsCovered });
 });
 
 app.patch('/v1/clients/:id', requireTenant, requireActiveSubscription, requireRole('owner','admin','appraiser','cashier'), async (req, res) => {

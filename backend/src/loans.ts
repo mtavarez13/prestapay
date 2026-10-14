@@ -10,11 +10,16 @@ export function asDate(value: unknown): Date | null {
 }
 
 export function addPaymentPeriod(source: Date, frequency: PaymentFrequency): Date {
+  return addPaymentPeriods(source, frequency, 1);
+}
+
+export function addPaymentPeriods(source: Date, frequency: PaymentFrequency, count: number): Date {
   const date = new Date(source);
-  if (frequency === 'diaria') date.setDate(date.getDate() + 1);
-  if (frequency === 'semanal') date.setDate(date.getDate() + 7);
-  if (frequency === 'quincenal') date.setDate(date.getDate() + 15);
-  if (frequency === 'mensual') date.setMonth(date.getMonth() + 1);
+  const periods = Math.max(1, Math.min(600, Math.trunc(count) || 1));
+  if (frequency === 'diaria') date.setDate(date.getDate() + periods);
+  if (frequency === 'semanal') date.setDate(date.getDate() + periods * 7);
+  if (frequency === 'quincenal') date.setDate(date.getDate() + periods * 15);
+  if (frequency === 'mensual') date.setMonth(date.getMonth() + periods);
   return date;
 }
 
