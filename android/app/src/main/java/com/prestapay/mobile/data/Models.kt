@@ -17,7 +17,7 @@ import kotlinx.serialization.json.JsonElement
 @Serializable data class ArticleCreate(val name: String, val category: String, val brand: String, val state: String = "en_resguardo", val description: String = "", val contractId: String? = null, val clientId: String? = null)
 @Serializable data class CashTransaction(val id: String = "", val type: String, val amount: Double, val description: String? = null)
 @Serializable data class TransactionCreate(val contractId: String? = null, val type: String, val amount: Double, val description: String)
-@Serializable data class CreateResult(val id: String, val receiptId: String? = null)
+@Serializable data class CreateResult(val id: String, val receiptId: String? = null, val receiptNumber: String? = null, val previousBalance: Double = 0.0, val newBalance: Double = 0.0)
 @Serializable data class TenantCreate(val businessName: String, val legalName: String? = null, val taxId: String? = null, val phone: String? = null, val address: String? = null)
 @Serializable data class TenantCreateResponse(val tenant: TenantInfo, val membership: Membership)
 @Serializable data class BrandingInfo(val businessName: String = "PrestaPay", val legalName: String = "", val taxId: String = "", val address: String = "", val phone: String = "", val email: String = "", val currency: String = "DOP")

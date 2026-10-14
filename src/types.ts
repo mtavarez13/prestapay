@@ -152,6 +152,13 @@ export interface ReceiptData {
   description: string;
   amount: number;
   balance?: number;
+  previousBalance?: number;
+  contractNumber?: string;
+  loanType?: string;
+  capital?: number;
+  rate?: number;
+  installments?: number;
+  paymentFrequency?: PaymentFrequency;
 }
 
 export enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }

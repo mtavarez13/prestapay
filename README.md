@@ -50,6 +50,8 @@ La URL debe terminar en `/`. Para el emulador local, el valor predeterminado es 
 
 La app usa autenticación nativa de Firebase con correo/contraseña o Google mediante Credential Manager y conserva la sesión mediante Firebase Auth. Firestore mantiene caché persistente, listeners en tiempo real y una cola offline para clientes, préstamos e inventario; caja continúa usando el API por requerir una transacción atómica. Incluye tema de sistema, claro y oscuro guardado en DataStore, además de recordatorios diarios locales de cobros mediante WorkManager. La impresión Bluetooth requiere vincular la impresora en Android y aceptar el permiso de dispositivos cercanos.
 
+Al confirmar un ingreso o abono en Caja, web y Android generan un recibo PDF con el ancho térmico configurado (58/80 mm), datos comerciales de la empresa, detalles del préstamo, saldo anterior, pago aplicado, saldo pendiente y pie personalizado.
+
 La huella SHA-1 del keystore de desarrollo está registrada en Firebase. Antes de publicar en Play Store, registre también las huellas SHA-1/SHA-256 del keystore release o de Play App Signing.
 
 Los APK se generan en `android/app/build/outputs/apk/debug/app-debug.apk` y `android/app/build/outputs/apk/release/app-release.apk`. La configuración actual firma Release con la clave de desarrollo únicamente para pruebas; use una clave privada de publicación antes de Play Store. Para conectarlo fuera del emulador, reemplace `PRESTAPAY_API_URL` por una URL HTTPS alcanzable antes de compilar.

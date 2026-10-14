@@ -22,6 +22,7 @@
     "test:rules": "node --test test/firestore.rules.test.mjs",
     "test:rules:emulator": "npx firebase-tools emulators:exec --only firestore \"npm run test:rules\"",
     "generate:contract-sample": "tsx scripts/generate-contract-sample.ts",
+    "generate:receipt-sample": "tsx scripts/generate-receipt-sample.ts",
     "build:api": "npm --workspace backend run build",
     "build:all": "npm run lint && npm run build && npm test"
   },

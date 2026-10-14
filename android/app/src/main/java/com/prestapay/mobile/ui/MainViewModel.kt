@@ -84,7 +84,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun createClient(value: ClientCreate) = mutate { repository.createClient(value) }
     fun createLoan(value: LoanCreate) = mutate { repository.createLoan(value) }
     fun createArticle(value: ArticleCreate) = mutate { repository.createArticle(value) }
-    fun createTransaction(value: TransactionCreate) = mutate { repository.createTransaction(value) }
+    fun createTransaction(value: TransactionCreate, onSuccess: (CreateResult) -> Unit) = viewModelScope.launch {
+        state = state.copy(loading = true, error = null)
+        runCatching { repository.createTransaction(value) }
+            .onSuccess { result -> state = state.copy(loading = false); onSuccess(result) }
+            .onFailure { state = state.copy(loading = false, error = it.message) }
+    }
     private fun mutate(block: suspend () -> Unit) = viewModelScope.launch { state = state.copy(loading = true, error = null); runCatching { block(); state = state.copy(loading = false) }.onFailure { state = state.copy(loading = false, error = it.message) } }
     override fun onCleared() { repository.stopRealtime(); super.onCleared() }
 }

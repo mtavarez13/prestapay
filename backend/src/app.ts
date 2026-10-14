@@ -88,6 +88,7 @@ app.get('/v1/transactions', requireTenant, async (req, res) => {
 });
 app.post('/v1/transactions', requireTenant, requireActiveSubscription, requireRole('owner','admin','cashier'), async (req, res) => {
   const value = transactionSchema.parse(req.body); const tenantId = req.tenant!.id; const transactionRef = adminDb.collection(`tenants/${tenantId}/transactions`).doc(); const receiptRef = adminDb.collection(`tenants/${tenantId}/receipts`).doc();
+  const receiptNumber = `REC-${Date.now().toString(36).toUpperCase()}`;
   let previousBalance = 0; let newBalance = 0;
   await adminDb.runTransaction(async transaction => {
     if (value.contractId && value.type === 'ingreso') {
@@ -100,9 +101,9 @@ app.post('/v1/transactions', requireTenant, requireActiveSubscription, requireRo
       transaction.update(loanRef, { balance: newBalance, status: newBalance === 0 ? 'pagado' : 'activo', nextPaymentDate, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.identity!.uid });
     }
     transaction.create(transactionRef, { ...value, tenantId, previousBalance, newBalance, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
-    transaction.create(receiptRef, { tenantId, transactionId: transactionRef.id, number: `REC-${Date.now().toString(36).toUpperCase()}`, amount: value.amount, description: value.description, contractId: value.contractId ?? null, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
+    transaction.create(receiptRef, { tenantId, transactionId: transactionRef.id, number: receiptNumber, amount: value.amount, description: value.description, contractId: value.contractId ?? null, createdAt: FieldValue.serverTimestamp(), createdBy: req.identity!.uid });
   });
-  res.status(201).json({ id: transactionRef.id, receiptId: receiptRef.id, previousBalance, newBalance });
+  res.status(201).json({ id: transactionRef.id, receiptId: receiptRef.id, receiptNumber, previousBalance, newBalance });
 });
 
 app.patch('/v1/clients/:id', requireTenant, requireActiveSubscription, requireRole('owner','admin','appraiser','cashier'), async (req, res) => {
